@@ -25,7 +25,7 @@ exports.handler = async function (event) {
   const { action, subject, question, answer } = payload;
 
   try {
-    if (action === "question") {
+    if (action === "questions") {
       if (!subject) return { statusCode: 400, body: JSON.stringify({ error: "Missing subject" }) };
       const today = new Date().toDateString();
       const text = await callClaude(apiKey, [
@@ -33,14 +33,15 @@ exports.handler = async function (event) {
           role: "user",
           content:
             "You are a warm, encouraging Torah study companion helping someone check their own understanding. " +
-            "Write ONE short comprehension question (at most two sentences) about today's (" + today + ") " +
-            "daily portion of " + subject + ", as commonly studied via the Chabad.org / Sefaria daily study cycle. " +
-            "You don't know the exact text, so keep the question general enough to fit a typical day's portion, " +
-            "but ask about a concept, lesson, or detail rather than a yes/no question. " +
-            "Return ONLY the question itself, with no preamble, quotation marks, or label."
+            "Write exactly 5 short comprehension questions (each at most two sentences) about today's (" + today + ") " +
+            "daily portion of " + subject + ", as commonly studied via the Chabad.org / Sefaria / Hebcal daily study cycle. " +
+            "You don't know the exact text, so keep each question general enough to fit a typical day's portion, " +
+            "but ask about a concept, lesson, or detail rather than a yes/no question. Vary the angle across the 5 " +
+            "(e.g. main idea, a specific detail, practical application, connection to prior learning, personal reflection). " +
+            "Return ONLY a JSON array of exactly 5 strings (the questions) — no markdown formatting, code fences, or commentary."
         }
       ]);
-      return json200({ question: text.trim() });
+      return json200({ questions: extractQuestionArray(text) });
     }
 
     if (action === "feedback") {
@@ -91,4 +92,22 @@ async function callClaude(apiKey, messages) {
 
 function json200(obj) {
   return { statusCode: 200, headers: { "content-type": "application/json" }, body: JSON.stringify(obj) };
+}
+
+function extractQuestionArray(text) {
+  const cleaned = text.trim().replace(/^```(?:json)?/i, "").replace(/```$/, "").trim();
+  try {
+    const parsed = JSON.parse(cleaned);
+    if (Array.isArray(parsed)) {
+      const qs = parsed.filter((q) => typeof q === "string" && q.trim());
+      if (qs.length) return qs.slice(0, 5);
+    }
+  } catch (e) {
+    // fall through to line-based parsing
+  }
+  return cleaned
+    .split("\n")
+    .map((s) => s.replace(/^[\s"'\-\d.)]+/, "").replace(/[",]+$/, "").trim())
+    .filter(Boolean)
+    .slice(0, 5);
 }

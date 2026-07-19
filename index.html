@@ -140,7 +140,7 @@
 
   li.item-row {
     display: grid;
-    grid-template-columns: auto 1fr auto auto;
+    grid-template-columns: auto 1fr auto auto auto;
     align-items: center;
     gap: 0.85rem;
     padding: 0.8rem 0.9rem;
@@ -248,6 +248,19 @@
   }
 
   .remove-btn:hover { color: var(--maroon); background: rgba(122,31,43,0.08); }
+
+  .edit-btn {
+    background: none;
+    border: none;
+    color: var(--ink-soft);
+    font-size: 1rem;
+    cursor: pointer;
+    line-height: 1;
+    padding: 0.2rem 0.35rem;
+    border-radius: 4px;
+  }
+
+  .edit-btn:hover { color: var(--gold); background: rgba(184,134,11,0.12); }
 
   .add-form {
     margin-top: 1.5rem;
@@ -520,15 +533,22 @@
   </footer>
 </div>
 
-<!-- Notes modal (for custom items without a link) -->
-<div class="modal-overlay" id="notes-modal">
+<!-- Material edit modal (for any item's link/reference override + notes) -->
+<div class="modal-overlay" id="material-modal">
   <div class="modal">
-    <h2 id="notes-modal-title">Notes</h2>
-    <p class="modal-sub">Jot down where to find or what today's material is.</p>
-    <textarea id="notes-modal-text" style="width:100%;"></textarea>
+    <h2 id="material-modal-title">Edit Material</h2>
+    <p class="modal-sub">Set a link, or a Sefaria reference like <em>Bava_Metzia.15a</em>, and/or notes for this item. Leave the link blank to use the default source.</p>
+    <div class="form-field" style="margin-bottom:0.75rem;">
+      <label for="material-modal-link">Link or Sefaria reference</label>
+      <input type="text" id="material-modal-link" placeholder="e.g. Bava_Metzia.15a or https://...">
+    </div>
+    <div class="form-field">
+      <label for="material-modal-notes">Notes</label>
+      <textarea id="material-modal-notes" style="width:100%;"></textarea>
+    </div>
     <div class="form-actions" style="margin-top:1rem;">
-      <button type="button" class="ghost" id="notes-modal-close">Close</button>
-      <button type="button" class="primary" id="notes-modal-save">Save</button>
+      <button type="button" class="ghost" id="material-modal-close">Cancel</button>
+      <button type="button" class="primary" id="material-modal-save">Save</button>
     </div>
   </div>
 </div>
@@ -538,8 +558,9 @@
   <div class="modal">
     <h2 id="quiz-modal-title">Quick Check</h2>
     <p class="modal-sub" id="quiz-modal-sub">Let's see how it landed.</p>
+    <p class="modal-sub" id="quiz-progress" style="margin-top:-0.5rem;"></p>
     <div id="quiz-body">
-      <p class="spinner-line" id="quiz-loading">Thinking of a question&hellip;</p>
+      <p class="spinner-line" id="quiz-loading">Thinking of some questions&hellip;</p>
       <div id="quiz-question-area" style="display:none;">
         <div class="question-text" id="quiz-question-text"></div>
         <textarea id="quiz-answer-input" placeholder="Type your answer here..." style="width:100%;"></textarea>
@@ -587,8 +608,8 @@
         { id: "tehillim", name: "Tehillim", frequency: "daily", hasQuiz: false, materialType: "chabad-tehillim", createdAt: now },
         { id: "tanya", name: "Tanya", frequency: "daily", hasQuiz: false, materialType: "chabad-tanya", createdAt: now },
         { id: "rambam", name: "Rambam", frequency: "daily", hasQuiz: true, materialType: "chabad-rambam", createdAt: now },
-        { id: "kitzur", name: "Kitzur Shulchan Aruch", frequency: "daily", hasQuiz: false, materialType: "sefaria-kitzur", createdAt: now },
-        { id: "gemara", name: "Gemara", frequency: "weekly", dueDay: 5, hasQuiz: false, materialType: "sefaria-calendar", createdAt: now }
+        { id: "kitzur", name: "Kitzur Shulchan Aruch", frequency: "daily", hasQuiz: true, materialType: "sefaria-kitzur", createdAt: now },
+        { id: "gemara", name: "Gemara", frequency: "weekly", dueDay: 5, hasQuiz: true, materialType: "sefaria-calendar", createdAt: now }
       ],
       completions: {},
       quizLog: {}
@@ -712,11 +733,46 @@
       case "chabad-tehillim": return "https://www.chabad.org/dailystudy/tehillim.asp?tdate=" + tdate;
       case "chabad-tanya": return "https://www.chabad.org/dailystudy/tanya.asp?tdate=" + tdate;
       case "chabad-rambam": return "https://www.chabad.org/dailystudy/rambam.asp?tdate=" + tdate + "&rambamChapters=3";
-      case "sefaria-kitzur": return "https://www.sefaria.org/Kitzur_Shulchan_Arukh";
       case "sefaria-calendar": return "https://www.sefaria.org/calendars";
-      case "custom": return (item.link && /^https?:\/\//i.test(item.link)) ? item.link : null;
       default: return null;
     }
+  }
+
+  function normalizeLink(value) {
+    if (!value) return null;
+    var v = String(value).trim();
+    if (!v) return null;
+    if (/^https?:\/\//i.test(v)) return v;
+    return "https://www.sefaria.org/" + v.replace(/\s+/g, "_");
+  }
+
+  function escapeHtml(s) {
+    var map = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
+    return String(s).replace(/[&<>"']/g, function (c) { return map[c]; });
+  }
+
+  // ---- Hebcal daily Kitzur Shulchan Aruch lookup ----
+  var kitzurTodayCache = null; // { title, link } for today, once loaded
+
+  function fetchKitzurRaw() {
+    var ds = todayStr();
+    var url = "https://www.hebcal.com/hebcal?v=1&dksa=on&maj=off&min=off&nx=off&mod=off&mf=off&ss=off&yt=G&cfg=json&start=" + ds + "&end=" + ds;
+    return fetch(url).then(function (res) {
+      if (!res.ok) throw new Error("Hebcal error " + res.status);
+      return res.json();
+    }).then(function (data) {
+      var items = data.items || [];
+      for (var i = 0; i < items.length; i++) {
+        if (items[i].category === "kitzurShulchanAruch") return items[i];
+      }
+      return null;
+    });
+  }
+
+  function loadKitzurToday() {
+    fetchKitzurRaw().then(function (raw) {
+      if (raw) { kitzurTodayCache = raw; render(); }
+    }).catch(function () { /* offline or blocked — default link is used instead */ });
   }
 
   var dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -727,6 +783,9 @@
       parts.push("Weekly &middot; aim: " + dayNames[item.dueDay != null ? item.dueDay : 5]);
     } else {
       parts.push("Daily");
+    }
+    if (item.materialType === "sefaria-kitzur" && !item.link && kitzurTodayCache && kitzurTodayCache.title) {
+      parts.push("Today: " + escapeHtml(kitzurTodayCache.title));
     }
     if (item.hasQuiz) parts.push("Comprehension check");
     return parts.join(" &middot; ");
@@ -768,6 +827,13 @@
       streakEl.className = "item-streak";
       streakEl.innerHTML = '<span class="n">' + streak + "</span> " + (item.frequency === "weekly" ? "wk" : "day") + (streak === 1 ? "" : "s");
 
+      var editBtn = document.createElement("button");
+      editBtn.className = "edit-btn";
+      editBtn.type = "button";
+      editBtn.innerHTML = "&#9998;";
+      editBtn.title = "Edit material link / notes";
+      editBtn.addEventListener("click", function () { openMaterialModal(item); });
+
       var removeBtn = document.createElement("button");
       removeBtn.className = "remove-btn";
       removeBtn.type = "button";
@@ -778,6 +844,7 @@
       li.appendChild(btn);
       li.appendChild(main);
       li.appendChild(streakEl);
+      li.appendChild(editBtn);
       li.appendChild(removeBtn);
       list.appendChild(li);
     });
@@ -807,29 +874,50 @@
   }
 
   function onOpenMaterial(item) {
+    var overrideUrl = normalizeLink(item.link);
+    if (overrideUrl) { window.open(overrideUrl, "_blank", "noopener"); return; }
+
+    if (item.materialType === "sefaria-kitzur") {
+      if (kitzurTodayCache && kitzurTodayCache.link) {
+        window.open(kitzurTodayCache.link, "_blank", "noopener");
+      } else {
+        var tab = window.open("", "_blank");
+        fetchKitzurRaw().then(function (raw) {
+          tab.location.href = (raw && raw.link) || "https://www.sefaria.org/Kitzur_Shulchan_Arukh";
+        }).catch(function () {
+          tab.location.href = "https://www.sefaria.org/Kitzur_Shulchan_Arukh";
+        });
+      }
+      return;
+    }
+
     var url = materialUrl(item);
     if (url) { window.open(url, "_blank", "noopener"); return; }
-    openNotesModal(item);
+    openMaterialModal(item);
   }
 
-  // ---- Notes modal ----
-  var notesModal = document.getElementById("notes-modal");
-  var notesModalItem = null;
-  function openNotesModal(item) {
-    notesModalItem = item;
-    document.getElementById("notes-modal-title").textContent = item.name;
-    document.getElementById("notes-modal-text").value = item.notes || "";
-    notesModal.classList.add("open");
+  // ---- Material edit modal (link/reference override + notes) ----
+  var materialModal = document.getElementById("material-modal");
+  var materialModalItem = null;
+  function openMaterialModal(item) {
+    materialModalItem = item;
+    document.getElementById("material-modal-title").textContent = "Edit Material — " + item.name;
+    document.getElementById("material-modal-link").value = item.link || "";
+    document.getElementById("material-modal-notes").value = item.notes || "";
+    materialModal.classList.add("open");
   }
-  document.getElementById("notes-modal-close").addEventListener("click", function () {
-    notesModal.classList.remove("open");
+  document.getElementById("material-modal-close").addEventListener("click", function () {
+    materialModal.classList.remove("open");
   });
-  document.getElementById("notes-modal-save").addEventListener("click", function () {
-    if (notesModalItem) {
-      notesModalItem.notes = document.getElementById("notes-modal-text").value;
+  document.getElementById("material-modal-save").addEventListener("click", function () {
+    if (materialModalItem) {
+      var linkVal = document.getElementById("material-modal-link").value.trim();
+      materialModalItem.link = linkVal || null;
+      materialModalItem.notes = document.getElementById("material-modal-notes").value;
       saveState();
+      render();
     }
-    notesModal.classList.remove("open");
+    materialModal.classList.remove("open");
   });
 
   // ---- Add item form ----
@@ -881,16 +969,27 @@
     dueDayWrap.style.display = "none";
   });
 
-  // ---- Quiz modal ----
+  // ---- Quiz modal (5 questions per session) ----
   var quizModal = document.getElementById("quiz-modal");
   var quizLoading = document.getElementById("quiz-loading");
+  var quizProgress = document.getElementById("quiz-progress");
   var quizQuestionArea = document.getElementById("quiz-question-area");
   var quizQuestionText = document.getElementById("quiz-question-text");
   var quizAnswerInput = document.getElementById("quiz-answer-input");
   var quizFeedbackText = document.getElementById("quiz-feedback-text");
   var quizSubmitBtn = document.getElementById("quiz-submit-btn");
   var quizSkipBtn = document.getElementById("quiz-skip-btn");
-  var quizState = { item: null, key: null, question: null };
+  var quizState = { item: null, key: null, questions: [], index: 0, phase: "idle", offline: false };
+
+  function offlineFallbackQuestions(subject) {
+    return [
+      "Try explaining out loud what you just learned in " + subject + " — could you teach it to someone else?",
+      "What was the single most interesting point in today's " + subject + "?",
+      "Was there anything in today's " + subject + " that felt unclear or surprising?",
+      "How does today's " + subject + " connect to something you learned before?",
+      "If you had to summarize today's " + subject + " in one sentence, what would it be?"
+    ];
+  }
 
   function resetQuizModal() {
     quizLoading.style.display = "none";
@@ -898,17 +997,25 @@
     quizFeedbackText.style.display = "none";
     quizSubmitBtn.style.display = "none";
     quizAnswerInput.value = "";
+    quizAnswerInput.disabled = false;
     quizFeedbackText.textContent = "";
+    quizProgress.textContent = "";
   }
 
   function openQuiz(item, key) {
-    quizState = { item: item, key: key, question: null };
+    quizState = { item: item, key: key, questions: [], index: 0, phase: "loading", offline: false };
     document.getElementById("quiz-modal-title").textContent = "Quick Check — " + item.name;
     document.getElementById("quiz-modal-sub").textContent = "Let's see how today's " + item.name + " landed.";
     resetQuizModal();
+    quizLoading.textContent = "Thinking of some questions…";
     quizLoading.style.display = "block";
     quizModal.classList.add("open");
-    fetchQuizQuestion(item);
+
+    if (!state.quizLog[item.id]) state.quizLog[item.id] = {};
+    state.quizLog[item.id][key] = state.quizLog[item.id][key] || [];
+    saveState();
+
+    fetchQuizQuestions(item);
   }
 
   function callQuizFunction(payload) {
@@ -922,48 +1029,100 @@
     });
   }
 
-  function fetchQuizQuestion(item) {
-    callQuizFunction({ action: "question", subject: item.name })
+  function fetchQuizQuestions(item) {
+    callQuizFunction({ action: "questions", subject: item.name })
       .then(function (data) {
-        if (!data.question) throw new Error("No question returned");
-        quizState.question = data.question;
-        quizLoading.style.display = "none";
-        quizQuestionText.textContent = data.question;
-        quizQuestionArea.style.display = "block";
-        quizSubmitBtn.style.display = "inline-block";
+        var qs = Array.isArray(data.questions) ? data.questions.filter(function (q) { return q && q.trim(); }) : [];
+        if (qs.length === 0) throw new Error("No questions returned");
+        quizState.questions = qs.slice(0, 5);
+        quizState.offline = false;
+        showCurrentQuestion();
       })
       .catch(function () {
-        quizLoading.style.display = "none";
-        quizState.question = "(offline) Try explaining out loud what you just learned in " + item.name + " — could you teach it to someone else?";
-        quizQuestionText.textContent = quizState.question + "\n\nThe AI quiz isn't connected yet on this device. Once this app is deployed to Netlify with an API key, real questions will appear here.";
-        quizQuestionArea.style.display = "block";
-        quizSubmitBtn.style.display = "inline-block";
+        quizState.questions = offlineFallbackQuestions(item.name);
+        quizState.offline = true;
+        showCurrentQuestion();
       });
   }
 
+  function showCurrentQuestion() {
+    quizState.phase = "answering";
+    quizLoading.style.display = "none";
+    quizFeedbackText.style.display = "none";
+    quizFeedbackText.textContent = "";
+    quizAnswerInput.value = "";
+    quizAnswerInput.disabled = false;
+    quizProgress.textContent = "Question " + (quizState.index + 1) + " of " + quizState.questions.length;
+
+    var q = quizState.questions[quizState.index];
+    quizQuestionText.textContent = quizState.offline
+      ? q + "\n\nThe AI quiz isn't connected yet on this device. Once this app is deployed to Netlify with an API key, real questions will appear here."
+      : q;
+    quizQuestionArea.style.display = "block";
+    quizSubmitBtn.textContent = "Submit answer";
+    quizSubmitBtn.style.display = "inline-block";
+    quizSubmitBtn.disabled = false;
+  }
+
+  function afterFeedback() {
+    quizSubmitBtn.disabled = false;
+    var isLast = quizState.index >= quizState.questions.length - 1;
+    if (isLast) {
+      quizState.phase = "done";
+      quizSubmitBtn.textContent = "Finish";
+    } else {
+      quizState.phase = "next";
+      quizSubmitBtn.textContent = "Next question →";
+    }
+  }
+
   quizSubmitBtn.addEventListener("click", function () {
-    var answer = quizAnswerInput.value.trim();
-    if (!answer) { quizAnswerInput.focus(); return; }
+    if (quizState.phase === "answering") {
+      var answer = quizAnswerInput.value.trim();
+      if (!answer) { quizAnswerInput.focus(); return; }
+      var question = quizState.questions[quizState.index];
 
-    if (!state.quizLog[quizState.item.id]) state.quizLog[quizState.item.id] = {};
-    state.quizLog[quizState.item.id][quizState.key] = { question: quizState.question, answer: answer };
-    saveState();
+      var log = state.quizLog[quizState.item.id][quizState.key];
+      var entry = { question: question, answer: answer };
+      log.push(entry);
+      saveState();
 
-    quizSubmitBtn.disabled = true;
-    quizFeedbackText.style.display = "block";
-    quizFeedbackText.textContent = "Reading your answer…";
+      quizState.phase = "feedback-loading";
+      quizSubmitBtn.disabled = true;
+      quizAnswerInput.disabled = true;
+      quizFeedbackText.style.display = "block";
+      quizFeedbackText.textContent = "Reading your answer…";
 
-    callQuizFunction({ action: "feedback", subject: quizState.item.name, question: quizState.question, answer: answer })
-      .then(function (data) {
-        quizFeedbackText.textContent = data.feedback || "Thanks for reflecting on it!";
-        quizSubmitBtn.style.display = "none";
-        quizSubmitBtn.disabled = false;
-      })
-      .catch(function () {
+      if (quizState.offline) {
         quizFeedbackText.textContent = "Nicely done taking a moment to reflect. (AI feedback isn't connected on this device yet.)";
-        quizSubmitBtn.style.display = "none";
-        quizSubmitBtn.disabled = false;
-      });
+        afterFeedback();
+        return;
+      }
+
+      callQuizFunction({ action: "feedback", subject: quizState.item.name, question: question, answer: answer })
+        .then(function (data) {
+          var feedback = data.feedback || "Thanks for reflecting on it!";
+          quizFeedbackText.textContent = feedback;
+          entry.feedback = feedback;
+          saveState();
+          afterFeedback();
+        })
+        .catch(function () {
+          quizFeedbackText.textContent = "Nicely done taking a moment to reflect. (AI feedback isn't connected right now.)";
+          afterFeedback();
+        });
+      return;
+    }
+
+    if (quizState.phase === "next") {
+      quizState.index++;
+      showCurrentQuestion();
+      return;
+    }
+
+    if (quizState.phase === "done") {
+      quizModal.classList.remove("open");
+    }
   });
 
   quizSkipBtn.addEventListener("click", function () {
@@ -971,6 +1130,7 @@
   });
 
   render();
+  loadKitzurToday();
 })();
 </script>
 </body>
