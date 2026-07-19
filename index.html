@@ -1,0 +1,977 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Yoman &mdash; Daily Learning Companion</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%95%AF%EF%B8%8F%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500&family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --parchment: #efe3c4;
+    --parchment-deep: #e6d6ab;
+    --parchment-shadow: #d8c797;
+    --ink: #3c2b1c;
+    --ink-soft: #6b5540;
+    --maroon: #7a1f2b;
+    --maroon-deep: #5a1620;
+    --gold: #b8860b;
+    --gold-bright: #d4a72c;
+    --border: #c3ab78;
+    --ok-green: #4c6b3c;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    font-family: 'EB Garamond', serif;
+    color: var(--ink);
+    background:
+      radial-gradient(circle at 15% 10%, rgba(255,255,255,0.25), transparent 40%),
+      radial-gradient(circle at 85% 85%, rgba(0,0,0,0.06), transparent 45%),
+      repeating-radial-gradient(circle at 50% 50%, rgba(120,90,40,0.03) 0, rgba(120,90,40,0.03) 1px, transparent 2px, transparent 4px),
+      linear-gradient(160deg, var(--parchment) 0%, var(--parchment-deep) 100%);
+    background-attachment: fixed;
+    padding: 2.5rem 1.25rem 4rem;
+  }
+
+  .page {
+    max-width: 720px;
+    margin: 0 auto;
+  }
+
+  header.masthead {
+    text-align: center;
+    margin-bottom: 2rem;
+  }
+
+  .ornament {
+    color: var(--gold);
+    letter-spacing: 0.6em;
+    font-size: 0.85rem;
+  }
+
+  h1 {
+    font-family: 'Cormorant Garamond', serif;
+    font-weight: 700;
+    font-size: 2.75rem;
+    margin: 0.35rem 0 0.15rem;
+    color: var(--maroon-deep);
+    letter-spacing: 0.02em;
+  }
+
+  .subtitle {
+    font-style: italic;
+    color: var(--ink-soft);
+    font-size: 1.05rem;
+    margin: 0;
+  }
+
+  .streak-banner {
+    margin: 1.75rem auto 0;
+    max-width: 420px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.6rem;
+    background: linear-gradient(180deg, #fff8e6, var(--parchment));
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.85rem 1.25rem;
+    box-shadow: 0 2px 0 var(--parchment-shadow), 0 6px 16px rgba(90, 60, 20, 0.12);
+  }
+
+  .streak-banner .flame {
+    font-size: 1.6rem;
+    filter: drop-shadow(0 1px 1px rgba(0,0,0,0.15));
+  }
+
+  .streak-banner .count {
+    font-family: 'Cormorant Garamond', serif;
+    font-weight: 700;
+    font-size: 1.9rem;
+    color: var(--maroon);
+    line-height: 1;
+  }
+
+  .streak-banner .label {
+    font-size: 0.85rem;
+    color: var(--ink-soft);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  main.card {
+    margin-top: 2.25rem;
+    background: rgba(255, 251, 240, 0.55);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 1px 0 rgba(255,255,255,0.4) inset, 0 10px 30px rgba(70, 45, 15, 0.14);
+    padding: 1.75rem;
+  }
+
+  .section-title {
+    font-family: 'Cormorant Garamond', serif;
+    font-weight: 600;
+    font-size: 1.1rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0.5rem;
+    margin: 0 0 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  ul.item-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+  }
+
+  li.item-row {
+    display: grid;
+    grid-template-columns: auto 1fr auto auto;
+    align-items: center;
+    gap: 0.85rem;
+    padding: 0.8rem 0.9rem;
+    background: rgba(255,255,255,0.4);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    transition: background 0.2s ease, transform 0.1s ease;
+  }
+
+  li.item-row.done {
+    background: linear-gradient(90deg, rgba(122,31,43,0.08), rgba(184,134,11,0.08));
+  }
+
+  li.item-row.overdue-warning {
+    border-color: var(--maroon);
+  }
+
+  .check-btn {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    border: 2px solid var(--gold);
+    background: rgba(255,255,255,0.5);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+    color: transparent;
+    flex-shrink: 0;
+    transition: all 0.15s ease;
+  }
+
+  .check-btn:hover { border-color: var(--maroon); }
+
+  .check-btn.checked {
+    background: var(--maroon);
+    border-color: var(--maroon);
+    color: var(--gold-bright);
+  }
+
+  .item-main {
+    min-width: 0;
+  }
+
+  .item-name-btn {
+    background: none;
+    border: none;
+    padding: 0;
+    font-family: 'Cormorant Garamond', serif;
+    font-weight: 600;
+    font-size: 1.2rem;
+    color: var(--maroon-deep);
+    cursor: pointer;
+    text-align: left;
+    text-decoration: none;
+    border-bottom: 1px dotted var(--gold);
+  }
+
+  .item-name-btn:hover { color: var(--maroon); }
+
+  .item-meta {
+    display: block;
+    font-size: 0.8rem;
+    color: var(--ink-soft);
+    margin-top: 0.15rem;
+  }
+
+  .badge {
+    display: inline-block;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 0.1rem 0.4rem;
+    border-radius: 3px;
+    background: rgba(184,134,11,0.15);
+    color: var(--gold);
+    border: 1px solid rgba(184,134,11,0.4);
+    margin-right: 0.35rem;
+  }
+
+  .item-streak {
+    text-align: right;
+    font-size: 0.85rem;
+    color: var(--ink-soft);
+    white-space: nowrap;
+  }
+
+  .item-streak .n {
+    font-family: 'Cormorant Garamond', serif;
+    font-weight: 700;
+    color: var(--maroon);
+    font-size: 1.05rem;
+  }
+
+  .remove-btn {
+    background: none;
+    border: none;
+    color: var(--ink-soft);
+    font-size: 1.1rem;
+    cursor: pointer;
+    line-height: 1;
+    padding: 0.2rem 0.35rem;
+    border-radius: 4px;
+  }
+
+  .remove-btn:hover { color: var(--maroon); background: rgba(122,31,43,0.08); }
+
+  .add-form {
+    margin-top: 1.5rem;
+    border-top: 1px solid var(--border);
+    padding-top: 1.25rem;
+  }
+
+  .add-toggle {
+    font-family: 'EB Garamond', serif;
+    font-size: 0.95rem;
+    background: none;
+    border: 1px solid var(--gold);
+    color: var(--maroon-deep);
+    padding: 0.45rem 0.9rem;
+    border-radius: 5px;
+    cursor: pointer;
+  }
+
+  .add-toggle:hover { background: rgba(184,134,11,0.12); }
+
+  form#add-item-form {
+    display: none;
+    margin-top: 1rem;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  form#add-item-form.open { display: flex; }
+
+  .form-row {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  .form-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    flex: 1;
+    min-width: 160px;
+  }
+
+  .form-field label {
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--ink-soft);
+  }
+
+  input[type="text"], input[type="url"], select, textarea {
+    font-family: 'EB Garamond', serif;
+    font-size: 1rem;
+    padding: 0.5rem 0.6rem;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    background: rgba(255,255,255,0.6);
+    color: var(--ink);
+  }
+
+  textarea { resize: vertical; min-height: 70px; }
+
+  input:focus, select:focus, textarea:focus {
+    outline: 2px solid var(--gold-bright);
+    outline-offset: 1px;
+  }
+
+  .checkbox-field {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-direction: row;
+  }
+
+  .checkbox-field input { width: 16px; height: 16px; }
+
+  .form-actions {
+    display: flex;
+    gap: 0.6rem;
+    justify-content: flex-end;
+  }
+
+  button.primary {
+    font-family: 'EB Garamond', serif;
+    font-size: 1rem;
+    background: var(--maroon);
+    color: #fbeecb;
+    border: none;
+    padding: 0.55rem 1.1rem;
+    border-radius: 5px;
+    cursor: pointer;
+  }
+
+  button.primary:hover { background: var(--maroon-deep); }
+
+  button.ghost {
+    font-family: 'EB Garamond', serif;
+    font-size: 1rem;
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--ink-soft);
+    padding: 0.55rem 1.1rem;
+    border-radius: 5px;
+    cursor: pointer;
+  }
+
+  footer.note {
+    text-align: center;
+    margin-top: 2rem;
+    font-size: 0.82rem;
+    color: var(--ink-soft);
+    font-style: italic;
+  }
+
+  /* Modal */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(30, 18, 10, 0.55);
+    align-items: center;
+    justify-content: center;
+    padding: 1.25rem;
+    z-index: 50;
+  }
+
+  .modal-overlay.open { display: flex; }
+
+  .modal {
+    background: linear-gradient(180deg, #fbf3dd, var(--parchment));
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    max-width: 480px;
+    width: 100%;
+    padding: 1.75rem;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.35);
+  }
+
+  .modal h2 {
+    font-family: 'Cormorant Garamond', serif;
+    color: var(--maroon-deep);
+    margin: 0 0 0.25rem;
+    font-size: 1.4rem;
+  }
+
+  .modal .modal-sub {
+    font-size: 0.85rem;
+    color: var(--ink-soft);
+    margin-bottom: 1rem;
+    font-style: italic;
+  }
+
+  .modal .question-text {
+    background: rgba(255,255,255,0.5);
+    border-left: 3px solid var(--gold);
+    padding: 0.75rem 1rem;
+    margin-bottom: 1rem;
+    font-size: 1.05rem;
+  }
+
+  .modal .feedback-text {
+    background: rgba(122,31,43,0.08);
+    border-left: 3px solid var(--maroon);
+    padding: 0.75rem 1rem;
+    margin-top: 1rem;
+    font-size: 0.98rem;
+  }
+
+  .spinner-line {
+    color: var(--ink-soft);
+    font-style: italic;
+    font-size: 0.95rem;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    body {
+      background:
+        radial-gradient(circle at 15% 10%, rgba(255,255,255,0.03), transparent 40%),
+        linear-gradient(160deg, #2a2117 0%, #1c150e 100%);
+      color: #e8dcc0;
+    }
+    :root {
+      --ink: #ecdfc2;
+      --ink-soft: #b9a67d;
+      --parchment: #2a2117;
+      --border: #55442a;
+    }
+    main.card, li.item-row, .streak-banner, .modal {
+      background: rgba(40, 31, 20, 0.65) !important;
+    }
+    input, select, textarea {
+      background: rgba(20,15,9,0.5);
+      color: #ecdfc2;
+    }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="masthead">
+    <div class="ornament">&#10086; &#10086; &#10086;</div>
+    <h1>Yoman</h1>
+    <p class="subtitle">a daily learning companion</p>
+    <div class="streak-banner">
+      <span class="flame">&#128293;</span>
+      <span class="count" id="overall-streak-count">0</span>
+      <span class="label">day streak &mdash; everything checked off</span>
+    </div>
+  </header>
+
+  <main class="card">
+    <div class="section-title">Today's Learning</div>
+    <ul class="item-list" id="item-list"></ul>
+
+    <div class="add-form">
+      <button class="add-toggle" id="add-toggle-btn" type="button">+ Add a learning item</button>
+      <form id="add-item-form">
+        <div class="form-row">
+          <div class="form-field">
+            <label for="f-name">Name</label>
+            <input type="text" id="f-name" placeholder="e.g. Mishnayos" required>
+          </div>
+          <div class="form-field">
+            <label for="f-frequency">Frequency</label>
+            <select id="f-frequency">
+              <option value="daily">Daily</option>
+              <option value="weekly">Weekly</option>
+            </select>
+          </div>
+          <div class="form-field" id="f-dueday-wrap" style="display:none;">
+            <label for="f-dueday">Aim for</label>
+            <select id="f-dueday">
+              <option value="0">Sunday</option>
+              <option value="1">Monday</option>
+              <option value="2">Tuesday</option>
+              <option value="3">Wednesday</option>
+              <option value="4">Thursday</option>
+              <option value="5" selected>Friday</option>
+              <option value="6">Saturday</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-field">
+            <label for="f-link">Material link (optional)</label>
+            <input type="url" id="f-link" placeholder="https://...">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-field">
+            <label for="f-notes">Notes (optional, used if no link)</label>
+            <textarea id="f-notes" placeholder="Where to find today's material, or any notes..."></textarea>
+          </div>
+        </div>
+        <div class="checkbox-field">
+          <input type="checkbox" id="f-quiz">
+          <label for="f-quiz" style="text-transform:none;letter-spacing:normal;font-size:0.95rem;">Ask me a comprehension question after checking this off</label>
+        </div>
+        <div class="form-actions">
+          <button type="button" class="ghost" id="cancel-add-btn">Cancel</button>
+          <button type="submit" class="primary">Add item</button>
+        </div>
+      </form>
+    </div>
+  </main>
+
+  <footer class="note">
+    Your progress is saved only in this browser (localStorage). Nothing leaves your device unless you deploy this app yourself.
+  </footer>
+</div>
+
+<!-- Notes modal (for custom items without a link) -->
+<div class="modal-overlay" id="notes-modal">
+  <div class="modal">
+    <h2 id="notes-modal-title">Notes</h2>
+    <p class="modal-sub">Jot down where to find or what today's material is.</p>
+    <textarea id="notes-modal-text" style="width:100%;"></textarea>
+    <div class="form-actions" style="margin-top:1rem;">
+      <button type="button" class="ghost" id="notes-modal-close">Close</button>
+      <button type="button" class="primary" id="notes-modal-save">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Quiz modal -->
+<div class="modal-overlay" id="quiz-modal">
+  <div class="modal">
+    <h2 id="quiz-modal-title">Quick Check</h2>
+    <p class="modal-sub" id="quiz-modal-sub">Let's see how it landed.</p>
+    <div id="quiz-body">
+      <p class="spinner-line" id="quiz-loading">Thinking of a question&hellip;</p>
+      <div id="quiz-question-area" style="display:none;">
+        <div class="question-text" id="quiz-question-text"></div>
+        <textarea id="quiz-answer-input" placeholder="Type your answer here..." style="width:100%;"></textarea>
+      </div>
+      <div class="feedback-text" id="quiz-feedback-text" style="display:none;"></div>
+    </div>
+    <div class="form-actions" style="margin-top:1rem;">
+      <button type="button" class="ghost" id="quiz-skip-btn">Close</button>
+      <button type="button" class="primary" id="quiz-submit-btn" style="display:none;">Submit answer</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var STORAGE_KEY = "yomanState_v1";
+
+  function pad(n) { return n < 10 ? "0" + n : "" + n; }
+  function dateStr(d) { return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()); }
+  function todayStr() { return dateStr(new Date()); }
+  function addDays(d, n) { var r = new Date(d); r.setDate(r.getDate() + n); return r; }
+
+  function isoWeekKey(d) {
+    var date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+    var dayNum = (date.getUTCDay() + 6) % 7;
+    date.setUTCDate(date.getUTCDate() - dayNum + 3);
+    var firstThursday = new Date(Date.UTC(date.getUTCFullYear(), 0, 4));
+    var weekNum = 1 + Math.round(((date - firstThursday) / 86400000 - 3 + ((firstThursday.getUTCDay() + 6) % 7)) / 7);
+    return date.getUTCFullYear() + "-W" + pad(weekNum);
+  }
+
+  function weekKeyForOffset(weeksAgo) {
+    return isoWeekKey(addDays(new Date(), -7 * weeksAgo));
+  }
+
+  function chabadDateParam(d) { return (d.getMonth() + 1) + "/" + d.getDate() + "/" + d.getFullYear(); }
+
+  function defaultState() {
+    var now = new Date().toISOString();
+    return {
+      items: [
+        { id: "chumash", name: "Chumash", frequency: "daily", hasQuiz: true, materialType: "chabad-chumash", createdAt: now },
+        { id: "tehillim", name: "Tehillim", frequency: "daily", hasQuiz: false, materialType: "chabad-tehillim", createdAt: now },
+        { id: "tanya", name: "Tanya", frequency: "daily", hasQuiz: false, materialType: "chabad-tanya", createdAt: now },
+        { id: "rambam", name: "Rambam", frequency: "daily", hasQuiz: true, materialType: "chabad-rambam", createdAt: now },
+        { id: "kitzur", name: "Kitzur Shulchan Aruch", frequency: "daily", hasQuiz: false, materialType: "sefaria-kitzur", createdAt: now },
+        { id: "gemara", name: "Gemara", frequency: "weekly", dueDay: 5, hasQuiz: false, materialType: "sefaria-calendar", createdAt: now }
+      ],
+      completions: {},
+      quizLog: {}
+    };
+  }
+
+  function loadState() {
+    try {
+      var raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return defaultState();
+      var parsed = JSON.parse(raw);
+      if (!parsed || !Array.isArray(parsed.items)) return defaultState();
+      parsed.completions = parsed.completions || {};
+      parsed.quizLog = parsed.quizLog || {};
+      return parsed;
+    } catch (e) {
+      return defaultState();
+    }
+  }
+
+  function saveState() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+
+  var state = loadState();
+
+  function isChecked(item, key) {
+    return !!(state.completions[item.id] && state.completions[item.id][key]);
+  }
+
+  function setChecked(item, key, val) {
+    if (!state.completions[item.id]) state.completions[item.id] = {};
+    if (val) state.completions[item.id][key] = true;
+    else delete state.completions[item.id][key];
+  }
+
+  function currentKeyFor(item) {
+    return item.frequency === "weekly" ? isoWeekKey(new Date()) : todayStr();
+  }
+
+  function computeDailyStreak(item) {
+    var checkedToday = isChecked(item, todayStr());
+    var streak = 0;
+    var cursor = checkedToday ? new Date() : addDays(new Date(), -1);
+    while (true) {
+      var key = dateStr(cursor);
+      if (isChecked(item, key)) { streak++; cursor = addDays(cursor, -1); }
+      else break;
+      if (streak > 3650) break;
+    }
+    return streak;
+  }
+
+  function computeWeeklyStreak(item) {
+    var checkedThisWeek = isChecked(item, isoWeekKey(new Date()));
+    var streak = 0;
+    var weeksAgo = checkedThisWeek ? 0 : 1;
+    while (true) {
+      var key = weekKeyForOffset(weeksAgo);
+      if (isChecked(item, key)) { streak++; weeksAgo++; }
+      else break;
+      if (streak > 520) break;
+    }
+    return streak;
+  }
+
+  function computeStreak(item) {
+    return item.frequency === "weekly" ? computeWeeklyStreak(item) : computeDailyStreak(item);
+  }
+
+  function isWeeklyOverdueWarning(item) {
+    if (item.frequency !== "weekly") return false;
+    var checkedThisWeek = isChecked(item, isoWeekKey(new Date()));
+    if (checkedThisWeek) return false;
+    var dow = new Date().getDay();
+    return typeof item.dueDay === "number" && dow >= item.dueDay;
+  }
+
+  // Overall streak: consecutive days where every daily item is checked,
+  // and no weekly item's most recently fully-elapsed week was left blank.
+  function isWeeklyItemOnTrackAsOf(item, asOfDate) {
+    var weeksBack = 1;
+    while (weeksBack <= 520) {
+      var weekStart = addDays(asOfDate, -7 * weeksBack);
+      var created = item.createdAt ? new Date(item.createdAt) : null;
+      if (created && weekStart < created) return true;
+      var key = isoWeekKey(weekStart);
+      var weekEnd = addDays(weekStart, 7);
+      if (weekEnd > asOfDate) { weeksBack++; continue; }
+      if (!isChecked(item, key)) return false;
+      weeksBack++;
+      if (weeksBack > 2) break;
+    }
+    return true;
+  }
+
+  function computeOverallStreak() {
+    var dailyItems = state.items.filter(function (i) { return i.frequency === "daily"; });
+    var weeklyItems = state.items.filter(function (i) { return i.frequency === "weekly"; });
+    if (dailyItems.length === 0) return 0;
+
+    var streak = 0;
+    var cursor = new Date();
+    var allTodayDone = dailyItems.every(function (i) { return isChecked(i, todayStr()); });
+    if (!allTodayDone) cursor = addDays(cursor, -1);
+
+    while (true) {
+      var key = dateStr(cursor);
+      var dailyOk = dailyItems.every(function (i) { return isChecked(i, key); });
+      var weeklyOk = weeklyItems.every(function (i) { return isWeeklyItemOnTrackAsOf(i, cursor); });
+      if (dailyOk && weeklyOk) { streak++; cursor = addDays(cursor, -1); }
+      else break;
+      if (streak > 3650) break;
+    }
+    return streak;
+  }
+
+  function materialUrl(item) {
+    var d = new Date();
+    var tdate = chabadDateParam(d);
+    switch (item.materialType) {
+      case "chabad-chumash": return "https://www.chabad.org/dailystudy/torahreading.asp?tdate=" + tdate;
+      case "chabad-tehillim": return "https://www.chabad.org/dailystudy/tehillim.asp?tdate=" + tdate;
+      case "chabad-tanya": return "https://www.chabad.org/dailystudy/tanya.asp?tdate=" + tdate;
+      case "chabad-rambam": return "https://www.chabad.org/dailystudy/rambam.asp?tdate=" + tdate + "&rambamChapters=3";
+      case "sefaria-kitzur": return "https://www.sefaria.org/Kitzur_Shulchan_Arukh";
+      case "sefaria-calendar": return "https://www.sefaria.org/calendars";
+      case "custom": return (item.link && /^https?:\/\//i.test(item.link)) ? item.link : null;
+      default: return null;
+    }
+  }
+
+  var dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+  function itemMetaText(item) {
+    var parts = [];
+    if (item.frequency === "weekly") {
+      parts.push("Weekly &middot; aim: " + dayNames[item.dueDay != null ? item.dueDay : 5]);
+    } else {
+      parts.push("Daily");
+    }
+    if (item.hasQuiz) parts.push("Comprehension check");
+    return parts.join(" &middot; ");
+  }
+
+  function render() {
+    var list = document.getElementById("item-list");
+    list.innerHTML = "";
+    state.items.forEach(function (item) {
+      var key = currentKeyFor(item);
+      var checked = isChecked(item, key);
+      var streak = computeStreak(item);
+      var overdue = isWeeklyOverdueWarning(item);
+
+      var li = document.createElement("li");
+      li.className = "item-row" + (checked ? " done" : "") + (overdue ? " overdue-warning" : "");
+
+      var btn = document.createElement("button");
+      btn.className = "check-btn" + (checked ? " checked" : "");
+      btn.type = "button";
+      btn.innerHTML = checked ? "&#10003;" : "";
+      btn.setAttribute("aria-label", "Mark " + item.name + " complete");
+      btn.addEventListener("click", function () { onToggle(item); });
+
+      var main = document.createElement("div");
+      main.className = "item-main";
+      var nameBtn = document.createElement("button");
+      nameBtn.type = "button";
+      nameBtn.className = "item-name-btn";
+      nameBtn.textContent = item.name;
+      nameBtn.addEventListener("click", function () { onOpenMaterial(item); });
+      var meta = document.createElement("span");
+      meta.className = "item-meta";
+      meta.innerHTML = itemMetaText(item);
+      main.appendChild(nameBtn);
+      main.appendChild(meta);
+
+      var streakEl = document.createElement("div");
+      streakEl.className = "item-streak";
+      streakEl.innerHTML = '<span class="n">' + streak + "</span> " + (item.frequency === "weekly" ? "wk" : "day") + (streak === 1 ? "" : "s");
+
+      var removeBtn = document.createElement("button");
+      removeBtn.className = "remove-btn";
+      removeBtn.type = "button";
+      removeBtn.innerHTML = "&#10005;";
+      removeBtn.title = "Remove item";
+      removeBtn.addEventListener("click", function () { onRemove(item); });
+
+      li.appendChild(btn);
+      li.appendChild(main);
+      li.appendChild(streakEl);
+      li.appendChild(removeBtn);
+      list.appendChild(li);
+    });
+
+    document.getElementById("overall-streak-count").textContent = computeOverallStreak();
+  }
+
+  function onToggle(item) {
+    var key = currentKeyFor(item);
+    var wasChecked = isChecked(item, key);
+    setChecked(item, key, !wasChecked);
+    saveState();
+    render();
+    if (!wasChecked && item.hasQuiz) {
+      var already = state.quizLog[item.id] && state.quizLog[item.id][key];
+      if (!already) openQuiz(item, key);
+    }
+  }
+
+  function onRemove(item) {
+    if (!confirm('Remove "' + item.name + '" and its history?')) return;
+    state.items = state.items.filter(function (i) { return i.id !== item.id; });
+    delete state.completions[item.id];
+    delete state.quizLog[item.id];
+    saveState();
+    render();
+  }
+
+  function onOpenMaterial(item) {
+    var url = materialUrl(item);
+    if (url) { window.open(url, "_blank", "noopener"); return; }
+    openNotesModal(item);
+  }
+
+  // ---- Notes modal ----
+  var notesModal = document.getElementById("notes-modal");
+  var notesModalItem = null;
+  function openNotesModal(item) {
+    notesModalItem = item;
+    document.getElementById("notes-modal-title").textContent = item.name;
+    document.getElementById("notes-modal-text").value = item.notes || "";
+    notesModal.classList.add("open");
+  }
+  document.getElementById("notes-modal-close").addEventListener("click", function () {
+    notesModal.classList.remove("open");
+  });
+  document.getElementById("notes-modal-save").addEventListener("click", function () {
+    if (notesModalItem) {
+      notesModalItem.notes = document.getElementById("notes-modal-text").value;
+      saveState();
+    }
+    notesModal.classList.remove("open");
+  });
+
+  // ---- Add item form ----
+  var addToggleBtn = document.getElementById("add-toggle-btn");
+  var addForm = document.getElementById("add-item-form");
+  var freqSelect = document.getElementById("f-frequency");
+  var dueDayWrap = document.getElementById("f-dueday-wrap");
+
+  addToggleBtn.addEventListener("click", function () {
+    addForm.classList.toggle("open");
+  });
+  document.getElementById("cancel-add-btn").addEventListener("click", function () {
+    addForm.classList.remove("open");
+    addForm.reset();
+    dueDayWrap.style.display = "none";
+  });
+  freqSelect.addEventListener("change", function () {
+    dueDayWrap.style.display = freqSelect.value === "weekly" ? "" : "none";
+  });
+
+  addForm.addEventListener("submit", function (e) {
+    e.preventDefault();
+    var name = document.getElementById("f-name").value.trim();
+    if (!name) return;
+    var frequency = freqSelect.value;
+    var link = document.getElementById("f-link").value.trim();
+    var notes = document.getElementById("f-notes").value.trim();
+    var hasQuiz = document.getElementById("f-quiz").checked;
+    var id = "custom-" + Date.now() + "-" + Math.floor(Math.random() * 1000);
+
+    var item = {
+      id: id,
+      name: name,
+      frequency: frequency,
+      hasQuiz: hasQuiz,
+      materialType: "custom",
+      link: link || null,
+      notes: notes || "",
+      createdAt: new Date().toISOString()
+    };
+    if (frequency === "weekly") item.dueDay = parseInt(document.getElementById("f-dueday").value, 10);
+
+    state.items.push(item);
+    saveState();
+    render();
+
+    addForm.reset();
+    addForm.classList.remove("open");
+    dueDayWrap.style.display = "none";
+  });
+
+  // ---- Quiz modal ----
+  var quizModal = document.getElementById("quiz-modal");
+  var quizLoading = document.getElementById("quiz-loading");
+  var quizQuestionArea = document.getElementById("quiz-question-area");
+  var quizQuestionText = document.getElementById("quiz-question-text");
+  var quizAnswerInput = document.getElementById("quiz-answer-input");
+  var quizFeedbackText = document.getElementById("quiz-feedback-text");
+  var quizSubmitBtn = document.getElementById("quiz-submit-btn");
+  var quizSkipBtn = document.getElementById("quiz-skip-btn");
+  var quizState = { item: null, key: null, question: null };
+
+  function resetQuizModal() {
+    quizLoading.style.display = "none";
+    quizQuestionArea.style.display = "none";
+    quizFeedbackText.style.display = "none";
+    quizSubmitBtn.style.display = "none";
+    quizAnswerInput.value = "";
+    quizFeedbackText.textContent = "";
+  }
+
+  function openQuiz(item, key) {
+    quizState = { item: item, key: key, question: null };
+    document.getElementById("quiz-modal-title").textContent = "Quick Check — " + item.name;
+    document.getElementById("quiz-modal-sub").textContent = "Let's see how today's " + item.name + " landed.";
+    resetQuizModal();
+    quizLoading.style.display = "block";
+    quizModal.classList.add("open");
+    fetchQuizQuestion(item);
+  }
+
+  function callQuizFunction(payload) {
+    return fetch("/.netlify/functions/quiz", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload)
+    }).then(function (res) {
+      if (!res.ok) throw new Error("Function returned " + res.status);
+      return res.json();
+    });
+  }
+
+  function fetchQuizQuestion(item) {
+    callQuizFunction({ action: "question", subject: item.name })
+      .then(function (data) {
+        if (!data.question) throw new Error("No question returned");
+        quizState.question = data.question;
+        quizLoading.style.display = "none";
+        quizQuestionText.textContent = data.question;
+        quizQuestionArea.style.display = "block";
+        quizSubmitBtn.style.display = "inline-block";
+      })
+      .catch(function () {
+        quizLoading.style.display = "none";
+        quizState.question = "(offline) Try explaining out loud what you just learned in " + item.name + " — could you teach it to someone else?";
+        quizQuestionText.textContent = quizState.question + "\n\nThe AI quiz isn't connected yet on this device. Once this app is deployed to Netlify with an API key, real questions will appear here.";
+        quizQuestionArea.style.display = "block";
+        quizSubmitBtn.style.display = "inline-block";
+      });
+  }
+
+  quizSubmitBtn.addEventListener("click", function () {
+    var answer = quizAnswerInput.value.trim();
+    if (!answer) { quizAnswerInput.focus(); return; }
+
+    if (!state.quizLog[quizState.item.id]) state.quizLog[quizState.item.id] = {};
+    state.quizLog[quizState.item.id][quizState.key] = { question: quizState.question, answer: answer };
+    saveState();
+
+    quizSubmitBtn.disabled = true;
+    quizFeedbackText.style.display = "block";
+    quizFeedbackText.textContent = "Reading your answer…";
+
+    callQuizFunction({ action: "feedback", subject: quizState.item.name, question: quizState.question, answer: answer })
+      .then(function (data) {
+        quizFeedbackText.textContent = data.feedback || "Thanks for reflecting on it!";
+        quizSubmitBtn.style.display = "none";
+        quizSubmitBtn.disabled = false;
+      })
+      .catch(function () {
+        quizFeedbackText.textContent = "Nicely done taking a moment to reflect. (AI feedback isn't connected on this device yet.)";
+        quizSubmitBtn.style.display = "none";
+        quizSubmitBtn.disabled = false;
+      });
+  });
+
+  quizSkipBtn.addEventListener("click", function () {
+    quizModal.classList.remove("open");
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>
