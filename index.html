@@ -1195,14 +1195,34 @@
       typeof q.correctIndex === "number" && q.correctIndex >= 0 && q.correctIndex <= 3;
   }
 
+  function sefariaRefFromLink(link) {
+    if (!link) return null;
+    var v = String(link).trim();
+    if (!v) return null;
+    var m = v.match(/sefaria\.org\/([^?#]+)/i);
+    if (m) return decodeURIComponent(m[1]);
+    if (/^https?:\/\//i.test(v)) return null; // some other external URL, no ref to extract
+    return v; // raw Sefaria-style shorthand ref, e.g. "Bava_Metzia.15a"
+  }
+
   function fetchQuizQuestions(item) {
-    var context = null;
-    if (item.materialType === "sefaria-kitzur") {
+    var payload = { action: "questions", subject: item.name };
+    var overrideRef = sefariaRefFromLink(item.link);
+
+    if (overrideRef) {
+      payload.sefariaRef = overrideRef;
+    } else if (item.materialType === "sefaria-kitzur") {
       var entry = kitzurCache[dateStr(viewDate)];
-      if (entry && entry.title) context = "Kitzur Shulchan Aruch, siman " + entry.title;
+      var m = entry && entry.title && entry.title.match(/^(\d+)/);
+      if (m) payload.sefariaRef = "Kitzur_Shulchan_Arukh." + m[1];
+      else if (entry && entry.title) payload.context = "Kitzur Shulchan Aruch, siman " + entry.title;
+    } else if (item.materialType === "chabad-rambam") {
+      payload.resolveCalendar = "rambam";
+    } else if (item.materialType === "chabad-chumash") {
+      payload.resolveCalendar = "parasha";
     }
 
-    callQuizFunction({ action: "questions", subject: item.name, context: context })
+    callQuizFunction(payload)
       .then(function (data) {
         var qs = Array.isArray(data.questions) ? data.questions.filter(isValidMcQuestion) : [];
         if (qs.length === 0) throw new Error("No valid questions returned");
