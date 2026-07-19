@@ -753,6 +753,17 @@
 
   // ---- Hebcal daily Kitzur Shulchan Aruch lookup ----
   var kitzurTodayCache = null; // { title, link } for today, once loaded
+  var KITZUR_MAX_CHAPTER = 221; // Kitzur Shulchan Aruch has 221 chapters total
+
+  // Hebcal's daily Kitzur feed occasionally contains malformed entries
+  // (e.g. an out-of-range chapter number), which produce a Sefaria link
+  // that 404s. Treat those as unusable rather than opening a dead link.
+  function isPlausibleKitzurTitle(title) {
+    if (!title) return false;
+    var nums = title.match(/\d+/g);
+    if (!nums || !nums.length) return false;
+    return nums.every(function (n) { return parseInt(n, 10) <= KITZUR_MAX_CHAPTER; });
+  }
 
   function fetchKitzurRaw() {
     var ds = todayStr();
@@ -763,7 +774,9 @@
     }).then(function (data) {
       var items = data.items || [];
       for (var i = 0; i < items.length; i++) {
-        if (items[i].category === "kitzurShulchanAruch") return items[i];
+        if (items[i].category === "kitzurShulchanAruch") {
+          return isPlausibleKitzurTitle(items[i].title) ? items[i] : null;
+        }
       }
       return null;
     });
