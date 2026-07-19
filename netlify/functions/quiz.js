@@ -92,8 +92,11 @@ async function resolveCalendarRef(kind) {
   if (!res.ok) return null;
   const data = await res.json();
   const items = data.calendar_items || [];
-  const wantedTitle = kind === "rambam" ? "Rambam (3 Chapters)" : "Parashat Hashavua";
-  const match = items.find((it) => it.title && it.title.en === wantedTitle);
+  const match = items.find((it) => {
+    const t = ((it.title && it.title.en) || "").toLowerCase();
+    if (kind === "rambam") return t.indexOf("rambam") >= 0 && t.indexOf("3") >= 0;
+    return t.indexOf("parashat hashavua") >= 0;
+  });
   return match ? match.url : null;
 }
 
