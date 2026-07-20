@@ -497,12 +497,35 @@
     font-style: italic;
   }
 
+  .quiz-question-label {
+    font-family: 'EB Garamond', serif;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--gold);
+    font-weight: 600;
+    margin-bottom: 0.35rem;
+  }
+
   .modal .question-text {
     background: rgba(255,255,255,0.5);
     border-left: 3px solid var(--gold);
-    padding: 0.75rem 1rem;
-    margin-bottom: 1rem;
-    font-size: 1.05rem;
+    padding: 0.9rem 1.1rem;
+    margin-bottom: 1.35rem;
+    font-family: 'Cormorant Garamond', serif;
+    font-weight: 600;
+    font-size: 1.25rem;
+    line-height: 1.35;
+  }
+
+  .quiz-answers-label {
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--ink-soft);
+    border-top: 1px solid var(--border);
+    padding-top: 0.85rem;
+    margin-bottom: 0.6rem;
   }
 
   .modal .feedback-text {
@@ -523,16 +546,37 @@
     font-family: 'EB Garamond', serif;
     font-size: 1rem;
     text-align: left;
-    padding: 0.65rem 0.9rem;
+    padding: 0.6rem 0.9rem;
     border: 1px solid var(--border);
     border-radius: 6px;
     background: rgba(255,255,255,0.5);
     cursor: pointer;
     color: var(--ink);
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
   }
 
   .quiz-option-btn:hover:not(:disabled) { border-color: var(--gold); background: rgba(184,134,11,0.1); }
   .quiz-option-btn:disabled { cursor: default; }
+
+  .quiz-option-num {
+    flex-shrink: 0;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    border: 1px solid var(--gold);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Cormorant Garamond', serif;
+    font-weight: 700;
+    font-size: 0.95rem;
+    color: var(--maroon-deep);
+    background: rgba(184,134,11,0.08);
+  }
+
+  .quiz-option-text { flex: 1; }
 
   .quiz-option-btn.correct {
     border-color: var(--ok-green);
@@ -540,9 +584,21 @@
     font-weight: 600;
   }
 
+  .quiz-option-btn.correct .quiz-option-num {
+    border-color: var(--ok-green);
+    background: var(--ok-green);
+    color: #fff;
+  }
+
   .quiz-option-btn.incorrect {
     border-color: var(--maroon);
     background: rgba(122,31,43,0.12);
+  }
+
+  .quiz-option-btn.incorrect .quiz-option-num {
+    border-color: var(--maroon);
+    background: var(--maroon);
+    color: #fff;
   }
 
   .spinner-line {
@@ -692,7 +748,9 @@
     <div id="quiz-body">
       <p class="spinner-line" id="quiz-loading">Thinking of some questions&hellip;</p>
       <div id="quiz-question-area" style="display:none;">
+        <div class="quiz-question-label">Question</div>
         <div class="question-text" id="quiz-question-text"></div>
+        <div class="quiz-answers-label">Choose one</div>
         <div class="quiz-options" id="quiz-options"></div>
       </div>
       <div class="feedback-text" id="quiz-feedback-text" style="display:none;"></div>
@@ -1214,12 +1272,15 @@
     } else if (item.materialType === "sefaria-kitzur") {
       var entry = kitzurCache[dateStr(viewDate)];
       var m = entry && entry.title && entry.title.match(/^(\d+)/);
-      if (m) payload.sefariaRef = "Kitzur_Shulchan_Arukh." + m[1];
+      if (m) { payload.sefariaRef = "Kitzur_Shulchan_Arukh." + m[1]; payload.citationStyle = "kitzur"; }
       else if (entry && entry.title) payload.context = "Kitzur Shulchan Aruch, siman " + entry.title;
     } else if (item.materialType === "chabad-rambam") {
       payload.resolveCalendar = "rambam";
+      payload.citationStyle = "rambam";
     } else if (item.materialType === "chabad-chumash") {
       payload.resolveCalendar = "parasha";
+      payload.citationStyle = "tanakh";
+      payload.includeRashi = true;
     }
 
     callQuizFunction(payload)
@@ -1255,7 +1316,17 @@
       var btn = document.createElement("button");
       btn.type = "button";
       btn.className = "quiz-option-btn";
-      btn.textContent = optionText;
+
+      var num = document.createElement("span");
+      num.className = "quiz-option-num";
+      num.textContent = i + 1;
+
+      var text = document.createElement("span");
+      text.className = "quiz-option-text";
+      text.textContent = optionText;
+
+      btn.appendChild(num);
+      btn.appendChild(text);
       btn.addEventListener("click", function () { onOptionSelected(i); });
       quizOptions.appendChild(btn);
     });
