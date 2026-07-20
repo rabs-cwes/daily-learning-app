@@ -29,12 +29,43 @@ exports.handler = async function (event) {
       if (!subject) return { statusCode: 400, body: JSON.stringify({ error: "Missing subject" }) };
       const today = new Date().toDateString();
 
+      let ref = sefariaRef || null;
+      try {
+        if (!ref && resolveCalendar) ref = await resolveCalendarRef(resolveCalendar, calYear, calMonth, calDay);
+      } catch (e) {
+        ref = null;
+      }
+
+      // Rambam's daily reading is 3 separate chapters. A single request asking
+      // the model to spread questions across all 3 is unreliable in practice --
+      // it tends to cluster on the first chapter. Instead, split into one
+      // request per chapter so each one physically can't see the others.
+      if (ref && resolveCalendar === "rambam") {
+        const range = parseChapterRange(ref);
+        if (range && range.to > range.from) {
+          const chapters = [];
+          for (let c = range.from; c <= range.to; c++) chapters.push(c);
+          const counts = distributeCount(5, chapters.length);
+
+          const results = await Promise.all(
+            chapters.map(async (chapterNum, i) => {
+              const chapterRef = range.bookPrefix + "." + chapterNum;
+              const material = await fetchSefariaText(chapterRef, {});
+              if (!material || counts[i] === 0) return [];
+              return generateQuestions(apiKey, subject, today, material, "rambam", counts[i]);
+            })
+          );
+
+          const allQuestions = [].concat(...results).slice(0, 5);
+          const dayLink = "https://www.sefaria.org/" + encodeURI(ref);
+          return json200({ questions: allQuestions, groundedIn: "Rambam perek " + chapters.join(", "), dayLink });
+        }
+      }
+
       let material = null;
       let refUsed = null;
       let dayLink = null;
       try {
-        let ref = sefariaRef || null;
-        if (!ref && resolveCalendar) ref = await resolveCalendarRef(resolveCalendar, calYear, calMonth, calDay);
         if (ref) {
           dayLink = "https://www.sefaria.org/" + encodeURI(ref);
           material = await fetchSefariaText(ref, { includeRashi: !!includeRashi });
@@ -44,54 +75,7 @@ exports.handler = async function (event) {
         material = null; // fall back to the general-knowledge prompt below
       }
 
-      let contentLine;
-      let requestLocationFields = false;
-      if (material) {
-        requestLocationFields = true;
-        contentLine =
-          "Here is the ACTUAL text studied today (" + refUsed + ")" +
-          (material.isHebrew ? ", given in Hebrew -- read it directly and write the quiz in English" : "") +
-          ". Each segment is prefixed with its exact location in brackets, like [3:23] for chapter:verse or chapter:halacha" +
-          (material.hasRashi ? ", and Rashi's commentary is included in its own labeled section, also bracket-labeled" : "") +
-          ":\n\n\"\"\"\n" + material.text + "\n\"\"\"\n\n" +
-          "Base every question strictly on facts, details, names, numbers, or ideas that literally appear in this passage. " +
-          "Do not ask about anything outside it, and do not use outside/general knowledge to fill gaps. " +
-          citationInstruction(citationStyle) + " " +
-          coverageInstruction(resolveCalendar, citationStyle, material.hasRashi, material.fromChapter, material.toChapter);
-      } else {
-        contentLine = context
-          ? "The specific portion being studied today is: " + context + ". Base the questions on the actual, factual content of that specific portion, drawing on your own knowledge of the text."
-          : "You aren't told the exact passage studied today, so base the questions on well-established, factual content that is characteristic of " + subject + " in general (real laws, verses, stories, or teachings from that text/corpus) rather than the literal day's page.";
-      }
-
-      const schemaLine = requestLocationFields
-        ? '[{"question": "...", "options": ["...", "...", "...", "..."], "correctIndex": 0, "explanation": "one short sentence explaining why that answer is correct", "sourceLocation": "3:26", "isRashi": false}]. ' +
-          "\"sourceLocation\" is the exact bracketed chapter:verse / chapter:halacha location the correct answer comes from (numbers only, no labels). " +
-          "\"isRashi\" is true only if sourceLocation points to a Rashi comment rather than the plain verse."
-        : '[{"question": "...", "options": ["...", "...", "...", "..."], "correctIndex": 0, "explanation": "one short sentence explaining why that answer is correct"}].';
-
-      const text = await callClaude(apiKey, [
-        {
-          role: "user",
-          content:
-            "You are building a comprehension quiz for someone finishing today's (" + today + ") study of " + subject + ". " +
-            contentLine + " " +
-            "Write exactly 5 multiple-choice questions that test factual recall or understanding of the actual material " +
-            "(specific facts, definitions, halachot, narrative details, names, numbers, or ideas that are objectively true or false) " +
-            "-- never a question of personal opinion, preference, or open-ended reflection. Every question must have exactly one " +
-            "objectively correct answer among the 4 options. Vary the angle across the 5 questions (a core fact, a specific detail, " +
-            "a definition or term, a practical application, a common point of confusion). Make incorrect options plausible, not silly. " +
-            "Write all Hebrew names and terms (people, places, offerings, halachic terms, etc.) spelled with English letters using " +
-            "traditional Ashkenazic Hebrew pronunciation, not full English translations and not Modern/Sephardic transliteration -- " +
-            "for example \"Moshe\" not \"Moses\", \"Korban Tomid\" not \"the daily offering\", \"Aharon\" not \"Aaron\", " +
-            "\"Shabbos\" not \"Shabbat\", \"Bais Hamikdash\" not \"Temple\" where a Hebrew term fits naturally. " +
-            "\n\nReturn ONLY a JSON array of exactly 5 objects, no markdown formatting, code fences, or commentary, in this exact shape: " +
-            schemaLine +
-            " correctIndex is the 0-based index into options of the single correct answer."
-        }
-      ]);
-
-      const questions = extractQuestionObjects(text).map((q) => attachSourceUrl(q, material, dayLink));
+      const questions = await generateQuestions(apiKey, subject, today, material, citationStyle, 5, context);
       return json200({ questions, groundedIn: refUsed, dayLink });
     }
 
@@ -101,6 +85,79 @@ exports.handler = async function (event) {
   }
 };
 
+// Splits total questions as evenly as possible across n buckets, front-loaded
+// (e.g. distributeCount(5, 3) -> [2, 2, 1]).
+function distributeCount(total, n) {
+  const base = Math.floor(total / n);
+  let extra = total % n;
+  const counts = [];
+  for (let i = 0; i < n; i++) {
+    counts.push(base + (extra > 0 ? 1 : 0));
+    if (extra > 0) extra--;
+  }
+  return counts;
+}
+
+// Parses a Sefaria ref like "Mishneh_Torah,_X.6-8" into { bookPrefix, from, to }.
+function parseChapterRange(ref) {
+  const m = ref.match(/^(.*)\.(\d+)(?:-(\d+))?$/);
+  if (!m) return null;
+  const from = parseInt(m[2], 10);
+  const to = m[3] ? parseInt(m[3], 10) : from;
+  return { bookPrefix: m[1], from, to };
+}
+
+async function generateQuestions(apiKey, subject, today, material, citationStyle, count, context) {
+  let contentLine;
+  let requestLocationFields = false;
+  if (material) {
+    requestLocationFields = true;
+    contentLine =
+      "Here is the ACTUAL text studied today (" + material.ref + ")" +
+      (material.isHebrew ? ", given in Hebrew -- read it directly and write the quiz in English" : "") +
+      ". Each segment is prefixed with its exact location in brackets, like [3:23] for chapter:verse or chapter:halacha" +
+      (material.hasRashi ? ", and Rashi's commentary is included in its own labeled section, also bracket-labeled" : "") +
+      ":\n\n\"\"\"\n" + material.text + "\n\"\"\"\n\n" +
+      "Base every question strictly on facts, details, names, numbers, or ideas that literally appear in this passage. " +
+      "Do not ask about anything outside it, and do not use outside/general knowledge to fill gaps. " +
+      citationInstruction(citationStyle) + " " +
+      rashiCoverageInstruction(citationStyle, material.hasRashi, count);
+  } else {
+    contentLine = context
+      ? "The specific portion being studied today is: " + context + ". Base the questions on the actual, factual content of that specific portion, drawing on your own knowledge of the text."
+      : "You aren't told the exact passage studied today, so base the questions on well-established, factual content that is characteristic of " + subject + " in general (real laws, verses, stories, or teachings from that text/corpus) rather than the literal day's page.";
+  }
+
+  const schemaLine = requestLocationFields
+    ? '[{"question": "...", "options": ["...", "...", "...", "..."], "correctIndex": 0, "explanation": "one short sentence explaining why that answer is correct", "sourceLocation": "3:26", "isRashi": false}]. ' +
+      "\"sourceLocation\" is the exact bracketed chapter:verse / chapter:halacha location the correct answer comes from (numbers only, no labels). " +
+      "\"isRashi\" is true only if sourceLocation points to a Rashi comment rather than the plain verse."
+    : '[{"question": "...", "options": ["...", "...", "...", "..."], "correctIndex": 0, "explanation": "one short sentence explaining why that answer is correct"}].';
+
+  const text = await callClaude(apiKey, [
+    {
+      role: "user",
+      content:
+        "You are building a comprehension quiz for someone finishing today's (" + today + ") study of " + subject + ". " +
+        contentLine + " " +
+        "Write exactly " + count + " multiple-choice question" + (count === 1 ? "" : "s") + " that test factual recall or understanding of the actual material " +
+        "(specific facts, definitions, halachot, narrative details, names, numbers, or ideas that are objectively true or false) " +
+        "-- never a question of personal opinion, preference, or open-ended reflection. Every question must have exactly one " +
+        "objectively correct answer among the 4 options. " + (count > 1 ? "Vary the angle across the questions (a core fact, a specific detail, " +
+        "a definition or term, a practical application, a common point of confusion). " : "") + "Make incorrect options plausible, not silly. " +
+        "Write all Hebrew names and terms (people, places, offerings, halachic terms, etc.) spelled with English letters using " +
+        "traditional Ashkenazic Hebrew pronunciation, not full English translations and not Modern/Sephardic transliteration -- " +
+        "for example \"Moshe\" not \"Moses\", \"Korban Tomid\" not \"the daily offering\", \"Aharon\" not \"Aaron\", " +
+        "\"Shabbos\" not \"Shabbat\", \"Bais Hamikdash\" not \"Temple\" where a Hebrew term fits naturally. " +
+        "\n\nReturn ONLY a JSON array of exactly " + count + " object" + (count === 1 ? "" : "s") + ", no markdown formatting, code fences, or commentary, in this exact shape: " +
+        schemaLine +
+        " correctIndex is the 0-based index into options of the single correct answer."
+    }
+  ]);
+
+  return extractQuestionObjects(text, count).map((q) => attachSourceUrl(q, material));
+}
+
 function citationInstruction(style) {
   if (style === "tanakh") return "For each explanation, cite the precise source as \"Perek X, Posuk Y\" (or \"Rashi on Perek X, Posuk Y\") using the bracketed location markers.";
   if (style === "rambam") return "For each explanation, cite the precise source as \"Perek X, Halacha Y\" using the bracketed location markers.";
@@ -108,39 +165,19 @@ function citationInstruction(style) {
   return "For each explanation, cite the precise source location using the bracketed location markers (e.g. daf/amud for Gemara).";
 }
 
-function coverageInstruction(resolveCalendar, style, hasRashi, fromChapter, toChapter) {
-  const parts = [];
-  if (resolveCalendar === "rambam") {
-    if (fromChapter != null && toChapter != null && toChapter > fromChapter) {
-      const chapters = [];
-      for (let c = fromChapter; c <= toChapter; c++) chapters.push(c);
-      parts.push(
-        "This passage spans perek " + chapters.join(", ") + " (" + chapters.length + " chapters). This is a STRICT requirement: " +
-        "distribute the 5 questions across ALL of these perek as evenly as possible so that EVERY one of perek " + chapters.join(", ") +
-        " has at least one question, and no single perek has more than 2. Before finalizing, check the chapter number in each " +
-        "question's sourceLocation and confirm every perek in " + chapters.join(", ") + " is represented at least once -- if any " +
-        "perek is missing, replace a question from an over-represented perek with one from the missing perek."
-      );
-    } else {
-      parts.push(
-        "This passage spans all of today's Rambam chapters (perek). Write at least one question from EACH chapter, so all of " +
-        "them are represented rather than clustering questions in just one."
-      );
-    }
+function rashiCoverageInstruction(style, hasRashi, count) {
+  if (style === "tanakh" && hasRashi && count > 1) {
+    return "At least " + Math.min(2, count) + " of the " + count + " questions must be based specifically on Rashi's commentary " +
+      "(not just the plain verse) -- test understanding of what Rashi explains, adds, or emphasizes beyond the plain text, " +
+      "citing him by name in the question or answer as appropriate.";
   }
-  if (style === "tanakh" && hasRashi) {
-    parts.push(
-      "At least 2 of the 5 questions must be based specifically on Rashi's commentary (not just the plain verse) -- " +
-      "test understanding of what Rashi explains, adds, or emphasizes beyond the plain text, citing him by name in the question or answer as appropriate."
-    );
-  }
-  return parts.join(" ");
+  return "";
 }
 
 // Builds a precise Sefaria URL for a question's cited source, falling back to
-// the whole day's material link when a precise per-question URL can't be built.
-function attachSourceUrl(q, material, dayLink) {
-  q.sourceUrl = dayLink || null;
+// the whole passage's material link when a precise per-question URL can't be built.
+function attachSourceUrl(q, material) {
+  q.sourceUrl = (material && material.dayLink) || (material ? "https://www.sefaria.org/" + encodeURI(material.ref) : null);
   if (material && material.book && q.sourceLocation && /^\d+:\d+$/.test(q.sourceLocation)) {
     let prefix = material.book.replace(/\s+/g, "_");
     if (q.isRashi) prefix = "Rashi_on_" + prefix;
@@ -240,17 +277,13 @@ async function fetchSefariaText(ref, opts) {
     }
   }
 
-  const fromChapter = data.sections && typeof data.sections[0] === "number" ? data.sections[0] : null;
-  const toChapter = data.toSections && typeof data.toSections[0] === "number" ? data.toSections[0] : null;
-
   return {
     text: combined.slice(0, MAX_CONTEXT_CHARS),
     isHebrew,
     hasRashi,
     book: data.book,
     ref: data.ref || ref,
-    fromChapter,
-    toChapter
+    dayLink: "https://www.sefaria.org/" + encodeURI(ref)
   };
 }
 
@@ -283,13 +316,13 @@ function json200(obj) {
   return { statusCode: 200, headers: { "content-type": "application/json" }, body: JSON.stringify(obj) };
 }
 
-function extractQuestionObjects(text) {
+function extractQuestionObjects(text, limit) {
   const cleaned = text.trim().replace(/^```(?:json)?/i, "").replace(/```$/, "").trim();
   try {
     const parsed = JSON.parse(cleaned);
     if (Array.isArray(parsed)) {
       const qs = parsed.filter(isValidMcQuestion);
-      if (qs.length) return qs.slice(0, 5);
+      if (qs.length) return qs.slice(0, limit || 5);
     }
   } catch (e) {
     // malformed JSON from the model -- nothing usable to recover here,
