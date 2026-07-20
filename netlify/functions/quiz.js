@@ -22,7 +22,7 @@ exports.handler = async function (event) {
     return { statusCode: 400, body: JSON.stringify({ error: "Invalid JSON body" }) };
   }
 
-  const { action, subject, context, sefariaRef, resolveCalendar, citationStyle, includeRashi } = payload;
+  const { action, subject, context, sefariaRef, resolveCalendar, citationStyle, includeRashi, calYear, calMonth, calDay } = payload;
 
   try {
     if (action === "questions") {
@@ -31,10 +31,12 @@ exports.handler = async function (event) {
 
       let material = null;
       let refUsed = null;
+      let dayLink = null;
       try {
         let ref = sefariaRef || null;
-        if (!ref && resolveCalendar) ref = await resolveCalendarRef(resolveCalendar);
+        if (!ref && resolveCalendar) ref = await resolveCalendarRef(resolveCalendar, calYear, calMonth, calDay);
         if (ref) {
+          dayLink = "https://www.sefaria.org/" + encodeURI(ref);
           material = await fetchSefariaText(ref, { includeRashi: !!includeRashi });
           if (material) refUsed = material.ref;
         }
@@ -43,21 +45,30 @@ exports.handler = async function (event) {
       }
 
       let contentLine;
+      let requestLocationFields = false;
       if (material) {
+        requestLocationFields = true;
         contentLine =
           "Here is the ACTUAL text studied today (" + refUsed + ")" +
           (material.isHebrew ? ", given in Hebrew -- read it directly and write the quiz in English" : "") +
           ". Each segment is prefixed with its exact location in brackets, like [3:23] for chapter:verse or chapter:halacha" +
-          (material.hasRashi ? ", and Rashi's commentary is included in its own labeled section" : "") +
+          (material.hasRashi ? ", and Rashi's commentary is included in its own labeled section, also bracket-labeled" : "") +
           ":\n\n\"\"\"\n" + material.text + "\n\"\"\"\n\n" +
           "Base every question strictly on facts, details, names, numbers, or ideas that literally appear in this passage. " +
           "Do not ask about anything outside it, and do not use outside/general knowledge to fill gaps. " +
-          citationInstruction(citationStyle, material.hasRashi);
+          citationInstruction(citationStyle) + " " +
+          coverageInstruction(resolveCalendar, citationStyle, material.hasRashi);
       } else {
         contentLine = context
           ? "The specific portion being studied today is: " + context + ". Base the questions on the actual, factual content of that specific portion, drawing on your own knowledge of the text."
           : "You aren't told the exact passage studied today, so base the questions on well-established, factual content that is characteristic of " + subject + " in general (real laws, verses, stories, or teachings from that text/corpus) rather than the literal day's page.";
       }
+
+      const schemaLine = requestLocationFields
+        ? '[{"question": "...", "options": ["...", "...", "...", "..."], "correctIndex": 0, "explanation": "one short sentence explaining why that answer is correct", "sourceLocation": "3:26", "isRashi": false}]. ' +
+          "\"sourceLocation\" is the exact bracketed chapter:verse / chapter:halacha location the correct answer comes from (numbers only, no labels). " +
+          "\"isRashi\" is true only if sourceLocation points to a Rashi comment rather than the plain verse."
+        : '[{"question": "...", "options": ["...", "...", "...", "..."], "correctIndex": 0, "explanation": "one short sentence explaining why that answer is correct"}].';
 
       const text = await callClaude(apiKey, [
         {
@@ -75,11 +86,13 @@ exports.handler = async function (event) {
             "for example \"Moshe\" not \"Moses\", \"Korban Tomid\" not \"the daily offering\", \"Aharon\" not \"Aaron\", " +
             "\"Shabbos\" not \"Shabbat\", \"Bais Hamikdash\" not \"Temple\" where a Hebrew term fits naturally. " +
             "\n\nReturn ONLY a JSON array of exactly 5 objects, no markdown formatting, code fences, or commentary, in this exact shape: " +
-            '[{"question": "...", "options": ["...", "...", "...", "..."], "correctIndex": 0, "explanation": "one short sentence naming the correct answer\'s exact source location"}]. ' +
-            "correctIndex is the 0-based index into options of the single correct answer."
+            schemaLine +
+            " correctIndex is the 0-based index into options of the single correct answer."
         }
       ]);
-      return json200({ questions: extractQuestionObjects(text), groundedIn: refUsed });
+
+      const questions = extractQuestionObjects(text).map((q) => attachSourceUrl(q, material, dayLink));
+      return json200({ questions, groundedIn: refUsed, dayLink });
     }
 
     return { statusCode: 400, body: JSON.stringify({ error: "Unknown action" }) };
@@ -88,18 +101,41 @@ exports.handler = async function (event) {
   }
 };
 
-function citationInstruction(style, hasRashi) {
-  if (style === "tanakh") {
-    return "For each explanation, cite the precise source as \"Perek X, Posuk Y\" using the bracketed location markers." +
-      (hasRashi ? " If the correct answer comes from Rashi's commentary rather than the plain verse, cite it as \"Rashi on Perek X, Posuk Y\" instead." : "");
-  }
-  if (style === "rambam") {
-    return "For each explanation, cite the precise source as \"Perek X, Halacha Y\" using the bracketed location markers.";
-  }
-  if (style === "kitzur") {
-    return "For each explanation, cite the precise source as \"Siman X, Se'if Y\" using the bracketed location markers.";
-  }
+function citationInstruction(style) {
+  if (style === "tanakh") return "For each explanation, cite the precise source as \"Perek X, Posuk Y\" (or \"Rashi on Perek X, Posuk Y\") using the bracketed location markers.";
+  if (style === "rambam") return "For each explanation, cite the precise source as \"Perek X, Halacha Y\" using the bracketed location markers.";
+  if (style === "kitzur") return "For each explanation, cite the precise source as \"Siman X, Se'if Y\" using the bracketed location markers.";
   return "For each explanation, cite the precise source location using the bracketed location markers (e.g. daf/amud for Gemara).";
+}
+
+function coverageInstruction(resolveCalendar, style, hasRashi) {
+  const parts = [];
+  if (resolveCalendar === "rambam") {
+    parts.push(
+      "This passage spans all 3 of today's Rambam chapters (perek). Write at least one question from EACH of the 3 " +
+      "chapters, so all three are represented rather than clustering questions in just one or two of them."
+    );
+  }
+  if (style === "tanakh" && hasRashi) {
+    parts.push(
+      "At least 2 of the 5 questions must be based specifically on Rashi's commentary (not just the plain verse) -- " +
+      "test understanding of what Rashi explains, adds, or emphasizes beyond the plain text, citing him by name in the question or answer as appropriate."
+    );
+  }
+  return parts.join(" ");
+}
+
+// Builds a precise Sefaria URL for a question's cited source, falling back to
+// the whole day's material link when a precise per-question URL can't be built.
+function attachSourceUrl(q, material, dayLink) {
+  q.sourceUrl = dayLink || null;
+  if (material && material.book && q.sourceLocation && /^\d+:\d+$/.test(q.sourceLocation)) {
+    let prefix = material.book.replace(/\s+/g, "_");
+    if (q.isRashi) prefix = "Rashi_on_" + prefix;
+    const loc = q.sourceLocation.replace(":", ".");
+    q.sourceUrl = "https://www.sefaria.org/" + encodeURI(prefix + "." + loc);
+  }
+  return q;
 }
 
 const SEFARIA_TEXT_API = "https://www.sefaria.org/api/texts/";
@@ -108,8 +144,10 @@ const MAX_CONTEXT_CHARS = 9000;
 
 // Resolves a Sefaria ref for a "kind" of item that follows a Sefaria-published
 // daily/weekly cycle but wasn't given an explicit ref by the frontend.
-async function resolveCalendarRef(kind) {
-  const res = await fetch(SEFARIA_CALENDARS_API);
+async function resolveCalendarRef(kind, year, month, day) {
+  let url = SEFARIA_CALENDARS_API;
+  if (year && month && day) url += "?year=" + year + "&month=" + month + "&day=" + day;
+  const res = await fetch(url);
   if (!res.ok) return null;
   const data = await res.json();
   const items = data.calendar_items || [];
@@ -190,7 +228,7 @@ async function fetchSefariaText(ref, opts) {
     }
   }
 
-  return { text: combined.slice(0, MAX_CONTEXT_CHARS), isHebrew, hasRashi, ref: data.ref || ref };
+  return { text: combined.slice(0, MAX_CONTEXT_CHARS), isHebrew, hasRashi, book: data.book, ref: data.ref || ref };
 }
 
 async function callClaude(apiKey, messages) {
@@ -203,7 +241,7 @@ async function callClaude(apiKey, messages) {
     },
     body: JSON.stringify({
       model: "claude-haiku-4-5-20251001",
-      max_tokens: 1800,
+      max_tokens: 2200,
       messages: messages
     })
   });

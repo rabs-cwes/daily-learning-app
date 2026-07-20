@@ -536,6 +536,18 @@
     font-size: 0.98rem;
   }
 
+  .quiz-source-link {
+    display: inline-block;
+    margin-left: 0.5rem;
+    color: var(--maroon);
+    font-weight: 600;
+    text-decoration: none;
+    border-bottom: 1px dotted var(--maroon);
+    white-space: nowrap;
+  }
+
+  .quiz-source-link:hover { color: var(--maroon-deep); }
+
   .quiz-options {
     display: flex;
     flex-direction: column;
@@ -984,6 +996,38 @@
     }).catch(function () { /* offline or blocked — default link is used instead */ });
   }
 
+  // ---- Sefaria daily-calendar lookup (Daily Rambam, Parashat Hashavua), keyed by viewed date ----
+  var calendarCache = {}; // "rambam|2026-07-19" -> { label, url } | null
+
+  function fetchCalendarItem(kind) {
+    var y = viewDate.getFullYear(), m = viewDate.getMonth() + 1, d = viewDate.getDate();
+    var url = "https://www.sefaria.org/api/calendars?year=" + y + "&month=" + m + "&day=" + d;
+    return fetch(url).then(function (res) {
+      if (!res.ok) throw new Error("Sefaria calendars error " + res.status);
+      return res.json();
+    }).then(function (data) {
+      var items = data.calendar_items || [];
+      var match = items.filter(function (it) {
+        var t = ((it.title && it.title.en) || "").toLowerCase();
+        return kind === "rambam" ? (t.indexOf("rambam") >= 0 && t.indexOf("3") >= 0) : t.indexOf("parashat hashavua") >= 0;
+      })[0];
+      if (!match) return null;
+      return {
+        label: (match.displayValue && match.displayValue.en) || match.ref,
+        url: "https://www.sefaria.org/" + encodeURI(match.url)
+      };
+    });
+  }
+
+  function loadCalendarItemForViewDate(kind) {
+    var key = kind + "|" + dateStr(viewDate);
+    if (Object.prototype.hasOwnProperty.call(calendarCache, key)) return;
+    fetchCalendarItem(kind).then(function (entry) {
+      calendarCache[key] = entry;
+      if (kind + "|" + dateStr(viewDate) === key) render();
+    }).catch(function () { calendarCache[key] = null; });
+  }
+
   var dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
   function itemMetaText(item) {
@@ -996,6 +1040,11 @@
     var kitzurEntry = kitzurCache[dateStr(viewDate)];
     if (item.materialType === "sefaria-kitzur" && !item.link && kitzurEntry && kitzurEntry.title) {
       parts.push((isViewingToday() ? "Today: " : "") + escapeHtml(kitzurEntry.title));
+    }
+    var calKind = item.materialType === "chabad-rambam" ? "rambam" : (item.materialType === "chabad-chumash" ? "parasha" : null);
+    if (calKind && !item.link) {
+      var calEntry = calendarCache[calKind + "|" + dateStr(viewDate)];
+      if (calEntry && calEntry.label) parts.push((isViewingToday() ? "Today: " : "") + escapeHtml(calEntry.label));
     }
     if (item.hasQuiz) parts.push("Comprehension check");
     return parts.join(" &middot; ");
@@ -1283,6 +1332,12 @@
       payload.includeRashi = true;
     }
 
+    if (payload.resolveCalendar) {
+      payload.calYear = viewDate.getFullYear();
+      payload.calMonth = viewDate.getMonth() + 1;
+      payload.calDay = viewDate.getDate();
+    }
+
     callQuizFunction(payload)
       .then(function (data) {
         var qs = Array.isArray(data.questions) ? data.questions.filter(isValidMcQuestion) : [];
@@ -1356,8 +1411,20 @@
     saveState();
 
     quizFeedbackText.style.display = "block";
+    quizFeedbackText.innerHTML = "";
     var prefix = quizState.offline ? "" : (correct ? "Correct! " : "Not quite. ");
-    quizFeedbackText.textContent = prefix + (q.explanation || (correct ? "" : "The correct answer is highlighted above.")) || "Thanks for answering!";
+    var mainText = document.createElement("span");
+    mainText.textContent = prefix + (q.explanation || (correct ? "" : "The correct answer is highlighted above.")) || "Thanks for answering!";
+    quizFeedbackText.appendChild(mainText);
+    if (q.sourceUrl) {
+      var srcLink = document.createElement("a");
+      srcLink.href = q.sourceUrl;
+      srcLink.target = "_blank";
+      srcLink.rel = "noopener";
+      srcLink.className = "quiz-source-link";
+      srcLink.textContent = "View source →";
+      quizFeedbackText.appendChild(srcLink);
+    }
 
     var isLast = quizState.index >= quizState.questions.length - 1;
     quizSubmitBtn.textContent = isLast ? "Finish" : "Next question →";
@@ -1425,6 +1492,8 @@
     renderDateNav();
     loadKitzurForViewDate();
     loadHebDateForViewDate();
+    loadCalendarItemForViewDate("rambam");
+    loadCalendarItemForViewDate("parasha");
   }
 
   document.getElementById("date-prev-btn").addEventListener("click", function () {
