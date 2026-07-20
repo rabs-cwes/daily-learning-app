@@ -205,7 +205,35 @@ async function resolveCalendarRef(kind, year, month, day) {
     if (kind === "rambam") return t.indexOf("rambam") >= 0 && t.indexOf("3") >= 0;
     return t.indexOf("parashat hashavua") >= 0;
   });
-  return match ? match.url : null;
+  if (!match) return null;
+
+  if (kind === "parasha") {
+    // Chabad's daily Chumash-with-Rashi cycle covers exactly one aliyah per
+    // day (Sunday = 1st aliyah ... Saturday = 7th), not the whole parasha.
+    // Use that day's specific aliyah instead of the full weekly range.
+    const aliyot = match.extraDetails && match.extraDetails.aliyot;
+    if (aliyot && aliyot.length && year && month && day) {
+      const dow = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
+      const aliyahRef = aliyot[Math.min(dow, aliyot.length - 1)];
+      if (aliyahRef) {
+        const technical = humanRefToTechnical(aliyahRef);
+        if (technical) return technical;
+      }
+    }
+  }
+
+  return match.url;
+}
+
+// Converts a Sefaria human-readable ref ("Deuteronomy 3:23-4:4") into the
+// dotted technical ref format the text API expects ("Deuteronomy.3.23-4.4").
+function humanRefToTechnical(ref) {
+  const m = ref.match(/^(.+?)\s+(\d+):(\d+)(?:-(?:(\d+):)?(\d+))?$/);
+  if (!m) return null;
+  const book = m[1].replace(/\s+/g, "_");
+  let result = book + "." + m[2] + "." + m[3];
+  if (m[5]) result += "-" + (m[4] ? m[4] + "." : "") + m[5];
+  return result;
 }
 
 function joinDeep(node) {
