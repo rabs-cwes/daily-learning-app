@@ -57,7 +57,7 @@ exports.handler = async function (event) {
           "Base every question strictly on facts, details, names, numbers, or ideas that literally appear in this passage. " +
           "Do not ask about anything outside it, and do not use outside/general knowledge to fill gaps. " +
           citationInstruction(citationStyle) + " " +
-          coverageInstruction(resolveCalendar, citationStyle, material.hasRashi);
+          coverageInstruction(resolveCalendar, citationStyle, material.hasRashi, material.fromChapter, material.toChapter);
       } else {
         contentLine = context
           ? "The specific portion being studied today is: " + context + ". Base the questions on the actual, factual content of that specific portion, drawing on your own knowledge of the text."
@@ -108,13 +108,25 @@ function citationInstruction(style) {
   return "For each explanation, cite the precise source location using the bracketed location markers (e.g. daf/amud for Gemara).";
 }
 
-function coverageInstruction(resolveCalendar, style, hasRashi) {
+function coverageInstruction(resolveCalendar, style, hasRashi, fromChapter, toChapter) {
   const parts = [];
   if (resolveCalendar === "rambam") {
-    parts.push(
-      "This passage spans all 3 of today's Rambam chapters (perek). Write at least one question from EACH of the 3 " +
-      "chapters, so all three are represented rather than clustering questions in just one or two of them."
-    );
+    if (fromChapter != null && toChapter != null && toChapter > fromChapter) {
+      const chapters = [];
+      for (let c = fromChapter; c <= toChapter; c++) chapters.push(c);
+      parts.push(
+        "This passage spans perek " + chapters.join(", ") + " (" + chapters.length + " chapters). This is a STRICT requirement: " +
+        "distribute the 5 questions across ALL of these perek as evenly as possible so that EVERY one of perek " + chapters.join(", ") +
+        " has at least one question, and no single perek has more than 2. Before finalizing, check the chapter number in each " +
+        "question's sourceLocation and confirm every perek in " + chapters.join(", ") + " is represented at least once -- if any " +
+        "perek is missing, replace a question from an over-represented perek with one from the missing perek."
+      );
+    } else {
+      parts.push(
+        "This passage spans all of today's Rambam chapters (perek). Write at least one question from EACH chapter, so all of " +
+        "them are represented rather than clustering questions in just one."
+      );
+    }
   }
   if (style === "tanakh" && hasRashi) {
     parts.push(
@@ -228,7 +240,18 @@ async function fetchSefariaText(ref, opts) {
     }
   }
 
-  return { text: combined.slice(0, MAX_CONTEXT_CHARS), isHebrew, hasRashi, book: data.book, ref: data.ref || ref };
+  const fromChapter = data.sections && typeof data.sections[0] === "number" ? data.sections[0] : null;
+  const toChapter = data.toSections && typeof data.toSections[0] === "number" ? data.toSections[0] : null;
+
+  return {
+    text: combined.slice(0, MAX_CONTEXT_CHARS),
+    isHebrew,
+    hasRashi,
+    book: data.book,
+    ref: data.ref || ref,
+    fromChapter,
+    toChapter
+  };
 }
 
 async function callClaude(apiKey, messages) {
