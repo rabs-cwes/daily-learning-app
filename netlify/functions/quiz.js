@@ -152,7 +152,7 @@ function attachSourceUrl(q, material, dayLink) {
 
 const SEFARIA_TEXT_API = "https://www.sefaria.org/api/texts/";
 const SEFARIA_CALENDARS_API = "https://www.sefaria.org/api/calendars";
-const MAX_CONTEXT_CHARS = 9000;
+const MAX_CONTEXT_CHARS = 120000;
 
 // Resolves a Sefaria ref for a "kind" of item that follows a Sefaria-published
 // daily/weekly cycle but wasn't given an explicit ref by the frontend.
