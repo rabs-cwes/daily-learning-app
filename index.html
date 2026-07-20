@@ -619,6 +619,37 @@
     font-size: 0.95rem;
   }
 
+  .quiz-tally {
+    text-align: center;
+    padding: 1.5rem 0 0.5rem;
+  }
+
+  .quiz-tally .n {
+    font-family: 'Cormorant Garamond', serif;
+    font-weight: 700;
+    font-size: 2.6rem;
+    color: var(--maroon-deep);
+    line-height: 1;
+    display: block;
+  }
+
+  .quiz-tally .label {
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--ink-soft);
+    margin-top: 0.4rem;
+  }
+
+  .quiz-tally .breakdown {
+    margin-top: 0.75rem;
+    font-size: 0.95rem;
+    color: var(--ink-soft);
+  }
+
+  .quiz-tally .breakdown .correct-n { color: var(--ok-green); font-weight: 600; }
+  .quiz-tally .breakdown .wrong-n { color: var(--maroon); font-weight: 600; }
+
   @media (prefers-color-scheme: dark) {
     body {
       background:
@@ -766,6 +797,7 @@
         <div class="quiz-options" id="quiz-options"></div>
       </div>
       <div class="feedback-text" id="quiz-feedback-text" style="display:none;"></div>
+      <div id="quiz-summary" style="display:none;"></div>
     </div>
     <div class="form-actions" style="margin-top:1rem;">
       <button type="button" class="ghost" id="quiz-skip-btn">Close</button>
@@ -996,7 +1028,7 @@
     }).catch(function () { /* offline or blocked — default link is used instead */ });
   }
 
-  // ---- Sefaria daily-calendar lookup (Daily Rambam, Parashat Hashavua), keyed by viewed date ----
+  // ---- Sefaria daily-calendar lookup (Daily Rambam, Chumash aliyah, Tanya Yomi), keyed by viewed date ----
   var calendarCache = {}; // "rambam|2026-07-19" -> { label, url } | null
 
   function fetchCalendarItem(kind) {
@@ -1009,9 +1041,31 @@
       var items = data.calendar_items || [];
       var match = items.filter(function (it) {
         var t = ((it.title && it.title.en) || "").toLowerCase();
-        return kind === "rambam" ? (t.indexOf("rambam") >= 0 && t.indexOf("3") >= 0) : t.indexOf("parashat hashavua") >= 0;
+        if (kind === "rambam") return t.indexOf("rambam") >= 0 && t.indexOf("3") >= 0;
+        if (kind === "tanya") return t.indexOf("tanya yomi") >= 0;
+        return t.indexOf("parashat hashavua") >= 0;
       })[0];
       if (!match) return null;
+
+      if (kind === "parasha") {
+        // Chabad's daily Chumash-with-Rashi cycle covers exactly one aliyah
+        // per day (Sunday = 1st ... Saturday = 7th), not the whole parasha,
+        // so show that day's specific perek:posuk range, not just the name.
+        var aliyot = match.extraDetails && match.extraDetails.aliyot;
+        var aliyahRef = aliyot && aliyot[Math.min(viewDate.getDay(), aliyot.length - 1)];
+        if (aliyahRef) {
+          var loc = aliyahRef.match(/\d+:\d+(?:-(?:\d+:)?\d+)?$/);
+          return {
+            label: ((match.displayValue && match.displayValue.en) || "") + " " + (loc ? loc[0] : aliyahRef),
+            url: "https://www.sefaria.org/" + encodeURI(match.url)
+          };
+        }
+      }
+
+      if (kind === "tanya") {
+        return { label: match.ref, url: "https://www.sefaria.org/" + encodeURI(match.url) };
+      }
+
       return {
         label: (match.displayValue && match.displayValue.en) || match.ref,
         url: "https://www.sefaria.org/" + encodeURI(match.url)
@@ -1028,6 +1082,18 @@
     }).catch(function () { calendarCache[key] = null; });
   }
 
+  // Standard 30-day Kriyas Tehillim monthly cycle (fixed, keyed by day of the
+  // Hebrew month), used for the Chabad daily Tehillim reading. Cross-checked
+  // against chabad.org: day 1 = "1-9", day 5 = "29-34", day 25 = "119:1-96".
+  var TEHILLIM_MONTHLY_CYCLE = {
+    1: "1-9", 2: "10-17", 3: "18-22", 4: "23-28", 5: "29-34", 6: "35-38",
+    7: "39-43", 8: "44-48", 9: "49-54", 10: "55-59", 11: "60-65", 12: "66-68",
+    13: "69-71", 14: "72-76", 15: "77-78", 16: "79-82", 17: "83-87", 18: "88-89",
+    19: "90-96", 20: "97-103", 21: "104-105", 22: "106-107", 23: "108-112",
+    24: "113-118", 25: "119:1-96", 26: "119:97-176", 27: "120-134", 28: "135-139",
+    29: "140-144", 30: "145-150"
+  };
+
   var dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
   function itemMetaText(item) {
@@ -1041,10 +1107,18 @@
     if (item.materialType === "sefaria-kitzur" && !item.link && kitzurEntry && kitzurEntry.title) {
       parts.push((isViewingToday() ? "Today: " : "") + escapeHtml(kitzurEntry.title));
     }
-    var calKind = item.materialType === "chabad-rambam" ? "rambam" : (item.materialType === "chabad-chumash" ? "parasha" : null);
+    var calKind = item.materialType === "chabad-rambam" ? "rambam" :
+      (item.materialType === "chabad-chumash" ? "parasha" :
+      (item.materialType === "chabad-tanya" ? "tanya" : null));
     if (calKind && !item.link) {
       var calEntry = calendarCache[calKind + "|" + dateStr(viewDate)];
       if (calEntry && calEntry.label) parts.push((isViewingToday() ? "Today: " : "") + escapeHtml(calEntry.label));
+    }
+    if (item.materialType === "chabad-tehillim" && !item.link) {
+      var hebEntry = hebDateCache[dateStr(viewDate)];
+      if (hebEntry && hebEntry.day && TEHILLIM_MONTHLY_CYCLE[hebEntry.day]) {
+        parts.push((isViewingToday() ? "Today: " : "") + "Tehillim " + TEHILLIM_MONTHLY_CYCLE[hebEntry.day]);
+      }
     }
     if (item.hasQuiz) parts.push("Comprehension check");
     return parts.join(" &middot; ");
@@ -1241,7 +1315,8 @@
   var quizFeedbackText = document.getElementById("quiz-feedback-text");
   var quizSubmitBtn = document.getElementById("quiz-submit-btn");
   var quizSkipBtn = document.getElementById("quiz-skip-btn");
-  var quizState = { item: null, key: null, questions: [], index: 0, phase: "idle", offline: false };
+  var quizSummary = document.getElementById("quiz-summary");
+  var quizState = { item: null, key: null, questions: [], index: 0, phase: "idle", offline: false, correct: 0, wrong: 0 };
 
   function offlineFallbackQuestions(subject) {
     // No AI connection available on this device — these are generic
@@ -1266,10 +1341,12 @@
     quizOptions.innerHTML = "";
     quizFeedbackText.textContent = "";
     quizProgress.textContent = "";
+    quizSummary.style.display = "none";
+    quizSummary.innerHTML = "";
   }
 
   function openQuiz(item, key) {
-    quizState = { item: item, key: key, questions: [], index: 0, phase: "loading", offline: false };
+    quizState = { item: item, key: key, questions: [], index: 0, phase: "loading", offline: false, correct: 0, wrong: 0 };
     document.getElementById("quiz-modal-title").textContent = "Quick Check — " + item.name;
     document.getElementById("quiz-modal-sub").textContent = "Let's see how today's " + item.name + " landed.";
     resetQuizModal();
@@ -1392,6 +1469,7 @@
   function onOptionSelected(chosenIndex) {
     var q = quizState.questions[quizState.index];
     var correct = chosenIndex === q.correctIndex;
+    if (correct) quizState.correct++; else quizState.wrong++;
 
     var buttons = quizOptions.querySelectorAll(".quiz-option-btn");
     buttons.forEach(function (btn, i) {
@@ -1432,6 +1510,40 @@
     quizSubmitBtn.style.display = "inline-block";
   }
 
+  function showQuizSummary() {
+    quizState.phase = "summary";
+    quizQuestionArea.style.display = "none";
+    quizFeedbackText.style.display = "none";
+    quizProgress.textContent = "";
+    quizSubmitBtn.style.display = "none";
+    document.getElementById("quiz-modal-sub").textContent = "Here's how you did.";
+
+    var total = quizState.correct + quizState.wrong;
+    quizSummary.innerHTML = "";
+
+    var tally = document.createElement("div");
+    tally.className = "quiz-tally";
+
+    var n = document.createElement("span");
+    n.className = "n";
+    n.textContent = quizState.correct + " / " + total;
+    tally.appendChild(n);
+
+    var label = document.createElement("div");
+    label.className = "label";
+    label.textContent = "correct";
+    tally.appendChild(label);
+
+    var breakdown = document.createElement("div");
+    breakdown.className = "breakdown";
+    breakdown.innerHTML = '<span class="correct-n">' + quizState.correct + " right</span> &middot; " +
+      '<span class="wrong-n">' + quizState.wrong + " wrong</span>";
+    tally.appendChild(breakdown);
+
+    quizSummary.appendChild(tally);
+    quizSummary.style.display = "block";
+  }
+
   quizSubmitBtn.addEventListener("click", function () {
     if (quizState.phase === "next") {
       quizState.index++;
@@ -1439,7 +1551,7 @@
       return;
     }
     if (quizState.phase === "done") {
-      quizModal.classList.remove("open");
+      showQuizSummary();
     }
   });
 
@@ -1459,11 +1571,11 @@
       if (!res.ok) throw new Error("Hebcal converter error " + res.status);
       return res.json();
     }).then(function (data) {
-      hebDateCache[ds] = { english: data.hd + " " + data.hm + " " + data.hy, hebrew: data.hebrew || "" };
+      hebDateCache[ds] = { english: data.hd + " " + data.hm + " " + data.hy, hebrew: data.hebrew || "", day: data.hd };
     }).catch(function () {
       hebDateCache[ds] = null;
     }).then(function () {
-      if (dateStr(viewDate) === ds) renderDateNav();
+      if (dateStr(viewDate) === ds) { renderDateNav(); render(); }
     });
   }
 
@@ -1494,6 +1606,7 @@
     loadHebDateForViewDate();
     loadCalendarItemForViewDate("rambam");
     loadCalendarItemForViewDate("parasha");
+    loadCalendarItemForViewDate("tanya");
   }
 
   document.getElementById("date-prev-btn").addEventListener("click", function () {
